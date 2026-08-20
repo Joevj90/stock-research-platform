@@ -1,0 +1,176 @@
+// Prisma schema for the AI Stock Research Platform.
+//
+// Phase 1 note: only Stock + PriceBar are actively written to by the app.
+// Financials, Filing, NewsItem, Analysis, Forecast, and Source are modeled
+// now so later phases (fundamentals, filings, news/sentiment, AI analysts,
+// investment committee, forecasts, citations) have a stable schema to land
+// on without migrations that reshape data the UI already depends on.
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+/// A covered security, keyed by ticker. Never seeded with hardcoded
+/// per-ticker facts — rows are created on first lookup.
+model Stock {
+  id        String   @id @default(cuid())
+  ticker    String   @unique
+  name      String?
+  exchange  String?
+  currency  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  priceBars  PriceBar[]
+  financials Financials[]
+  filings    Filing[]
+  newsItems  NewsItem[]
+  analyses   Analysis[]
+  forecasts  Forecast[]
+
+  @@map("stocks")
+}
+
+/// A single OHLCV bar (daily by default). Source of historical + current price data.
+model PriceBar {
+  id        String   @id @default(cuid())
+  stockId   String
+  stock     Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  timestamp DateTime
+  open      Float
+  high      Float
+  low       Float
+  close     Float
+  volume    Float
+  interval  String // "1d" | "1wk" | "1mo" (extendable to intraday later)
+  provider  String // e.g. "mock", "alpha_vantage", "finnhub"
+  createdAt DateTime @default(now())
+
+  @@unique([stockId, timestamp, interval])
+  @@index([stockId, timestamp])
+  @@map("price_bars")
+}
+
+/// A reported financial statement period (income/balance/cashflow summary).
+/// Populated in a later phase (fundamentals retrieval).
+model Financials {
+  id            String   @id @default(cuid())
+  stockId       String
+  stock         Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  periodEnd     DateTime
+  periodType    String // "annual" | "quarterly"
+  revenue       Float?
+  netIncome     Float?
+  eps           Float?
+  totalAssets   Float?
+  totalLiab     Float?
+  freeCashFlow  Float?
+  raw           String? // JSON blob for fields not yet normalized into columns
+  provider      String
+  createdAt     DateTime @default(now())
+
+  @@unique([stockId, periodEnd, periodType])
+  @@map("financials")
+}
+
+/// SEC filing metadata (10-K, 10-Q, 8-K, etc). Populated in a later phase.
+model Filing {
+  id          String   @id @default(cuid())
+  stockId     String
+  stock       Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  filingType  String // "10-K" | "10-Q" | "8-K" | ...
+  filedAt     DateTime
+  url         String
+  summary     String?
+  provider    String
+  createdAt   DateTime @default(now())
+
+  @@index([stockId, filedAt])
+  @@map("filings")
+}
+
+/// A news item relevant to the company or its industry. Populated in a later phase.
+model NewsItem {
+  id          String   @id @default(cuid())
+  stockId     String
+  stock       Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  headline    String
+  url         String
+  publishedAt DateTime
+  sourceName  String
+  sentiment   Float? // -1..1, filled in by sentiment analysis phase
+  provider    String
+  createdAt   DateTime @default(now())
+
+  @@index([stockId, publishedAt])
+  @@map("news_items")
+}
+
+/// Output of an AI analysis pass (single analyst, committee verdict, devil's
+/// advocate critique, or final synthesized report — distinguished by `kind`).
+/// Not written to in Phase 1; the AI analysis module is a stub.
+model Analysis {
+  id         String   @id @default(cuid())
+  stockId    String
+  stock      Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  kind       String // "analyst" | "committee" | "devils_advocate" | "final_report"
+  agentName  String? // e.g. "value_analyst", "technical_analyst"
+  summary    String
+  confidence Float? // 0..1
+  content    String // full structured output, JSON-encoded
+  createdAt  DateTime @default(now())
+
+  sources AnalysisSource[]
+
+  @@index([stockId, kind, createdAt])
+  @@map("analyses")
+}
+
+/// A 12-month (or other horizon) price forecast with bull/base/bear scenarios.
+/// Not written to in Phase 1.
+model Forecast {
+  id          String   @id @default(cuid())
+  stockId     String
+  stock       Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  horizonDays Int
+  bullTarget  Float?
+  baseTarget  Float?
+  bearTarget  Float?
+  rationale   String?
+  confidence  Float?
+  createdAt   DateTime @default(now())
+
+  @@index([stockId, createdAt])
+  @@map("forecasts")
+}
+
+/// A citable source (filing, news article, data provider response) backing
+/// an Analysis. Kept separate from NewsItem/Filing so an Analysis can cite
+/// arbitrary external material, not just rows already in this DB.
+model Source {
+  id        String   @id @default(cuid())
+  title     String
+  url       String?
+  publisher String?
+  createdAt DateTime @default(now())
+
+  analyses AnalysisSource[]
+
+  @@map("sources")
+}
+
+/// Join table: which sources back which analysis.
+model AnalysisSource {
+  analysisId String
+  analysis   Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  sourceId   String
+  source     Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@id([analysisId, sourceId])
+  @@map("analysis_sources")
+}
