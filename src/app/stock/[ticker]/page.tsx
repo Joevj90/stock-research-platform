@@ -9,11 +9,11 @@ import { FundamentalsPanel } from "@/components/FundamentalsPanel";
 import { FundamentalAnalystPanel } from "@/components/FundamentalAnalystPanel";
 import { NewsIntelligencePanel } from "@/components/NewsIntelligencePanel";
 import { ValuationPanel } from "@/components/ValuationPanel";
+import { SentimentPanel } from "@/components/SentimentPanel";
 import { HISTORICAL_PERIODS, type HistoricalPeriod, type StockSnapshot } from "@/lib/types";
 
 const COMING_SOON_SECTIONS = [
   { title: "SEC Filings", detail: "10-K, 10-Q, 8-K retrieval" },
-  { title: "Sentiment Agent", detail: "Dedicated sentiment scoring across sources" },
   { title: "Competitors", detail: "Qualitative competitive positioning" },
   { title: "Macro Conditions", detail: "Rates, inflation, sector context" },
   { title: "Bull / Base / Bear", detail: "Scenario analysis" },
@@ -123,6 +123,8 @@ function DashboardContent({ snapshot }: { snapshot: StockSnapshot }) {
       <NewsIntelligencePanel ticker={ticker} />
 
       <ValuationPanel ticker={ticker} />
+
+      <SentimentPanel ticker={ticker} />
 
       <section>
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-gray-500">

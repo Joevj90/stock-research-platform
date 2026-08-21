@@ -220,6 +220,59 @@ with raw ratios up front.
 Try it: `GET /api/fundamental-analysis/AAPL?period=annual`, or "Run
 Analysis" under Fundamental Analyst on a stock's page.
 
+## Sentiment Analysis
+
+Judges how investors currently feel about the company, at
+`src/server/agents/sentiment-analysis`. The central design decision of
+this step: it does NOT re-fetch or re-classify news — it builds directly
+on Step 7's News Intelligence output, which already deduplicates and
+classifies coverage into important events. That's what guarantees
+duplicate coverage of the same story can't distort the sentiment score —
+the dedup already happened one layer down.
+
+**Integration, not duplication:**
+- Calls `runNewsIntelligence` from `@/server/agents/news-intelligence`
+  (Step 7) for already-classified, already-deduplicated news events.
+- Computes market-reaction stats (`recentPriceChangePct`,
+  `volumeVsAverage`) using the exact same pure functions
+  (`rateOfChange`, `volumeTrend`) the Technical Analysis Agent already
+  uses from `src/lib/technical-indicators.ts` — not reimplemented.
+- Computes a lightweight, free fundamentals signal (recent revenue/net
+  income growth, a simple P/E) directly from Step 5's real data via
+  `getFundamentals`, specifically so comparing sentiment against reality
+  doesn't require paying for a second full Fundamental Analyst or
+  Valuation Engine AI run.
+- Degrades gracefully: if market data or fundamentals are unavailable
+  (e.g. an FMP plan limit), sentiment still gets calculated from news
+  alone rather than failing outright.
+
+**FACT / SOURCE-BASED SENTIMENT / AI INTERPRETATION / CONCLUSION:** the
+news events this agent receives are treated as SOURCE-BASED SENTIMENT
+(what sources are already saying, already classified) — not as this
+agent's own opinion, and not as FACT. The market-reaction and
+fundamentals numbers are FACT-derived CALCULATION. Only the score,
+trend, and comparisons are AI INTERPRETATION.
+
+**No social media data source is integrated** — the system prompt
+explicitly instructs the model not to reference social platforms as if
+it had real data from them, since none is ever supplied. This makes "social
+media opinions treated as fact" structurally impossible rather than just
+discouraged.
+
+**Score is not a simple count:** the system prompt explicitly instructs
+weighing by importance, recency, and strength rather than counting
+positive vs. negative events, and explicitly asks the model to flag
+mismatches between sentiment and reality (e.g. sentiment improving while
+the stock falls, extreme optimism despite an expensive P/E).
+
+**UI:** BULLISH/BEARISH/NEUTRAL + score lead, then "What People Like" /
+"What People Are Worried About", sentiment trend, and three reality-check
+comparisons (market reaction, sentiment vs. fundamentals, sentiment vs.
+price) — all traced back to the real news events and real numbers behind
+them.
+
+Try it: `GET /api/sentiment/AAPL`.
+
 ## Valuation Engine
 
 Estimates whether a stock looks cheap, reasonably priced, expensive, or
@@ -394,9 +447,11 @@ the News Intelligence agent's FMP news parsing, service orchestration,
 and — notably — its anti-hallucination URL-verification guardrail, and
 the Valuation Engine's ratio math, historical/peer comparison, and —
 notably — 19 tests on the DCF engine alone (including directional sanity
-checks like "lower discount rate must produce a higher fair value")
-(234 tests total). These are unit tests — a good next step is
-integration tests against a real test database.
+checks like "lower discount rate must produce a higher fair value"), and
+the Sentiment Analysis agent's reuse of shared indicator functions, its
+graceful degradation when supporting data is unavailable, and its AI
+schema validation (258 tests total). These are unit tests — a good next
+step is integration tests against a real test database.
 
 **Note on schema changes:** the build command uses `prisma db push
 --accept-data-loss`. This is appropriate here because `PriceBar`/`Quote`
