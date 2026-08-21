@@ -120,6 +120,49 @@ enough to keep a personal project off search engines and away from casual
 visitors, not a substitute for real auth if this app ever holds
 multi-user or sensitive data.
 
+## Technical Analysis Agent
+
+The first real AI agent in the app, at `src/server/agents/technical-analysis`.
+It computes standard technical indicators deterministically from real
+historical prices, then asks Claude to interpret (never calculate) those
+numbers into a qualitative reading.
+
+**Calculated (deterministic, zero AI involvement)** — see
+`src/lib/technical-indicators.ts`:
+SMA 20/50/100/200, EMA 20, RSI 14, MACD(12,26,9), Bollinger Bands(20,2),
+ATR 14, volume trend, annualized volatility, 10-day rate of change, and
+swing-based support/resistance levels.
+
+**AI interpretation** — see
+`src/server/agents/technical-analysis/interpreter.ts`: sends only the
+already-calculated numbers to Claude (`claude-sonnet-5`) with an explicit
+instruction not to compute or invent any numeric value, and validates the
+response against a strict schema (Zod) before accepting it — trend,
+momentum, bullish/bearish signals, a -100..+100 technical score, and a
+plain-English explanation.
+
+The result type keeps these two halves structurally separate
+(`calculated.source === "calculated"`, `interpretation.source === "ai"`),
+and the `TechnicalAnalysisPanel` UI component visually separates them too,
+so it's never ambiguous which numbers were computed in code vs. framed by
+the model.
+
+**Architecture:** the agent fetches price history exclusively through
+`getHistoricalPrices` from `@/server/market-data` — the same public
+service barrel everything else uses — never a provider directly. That's
+what keeps `UI → Backend → Market Data Service → Provider` true even as
+AI agents get added on top.
+
+**To use it:** set `ANTHROPIC_API_KEY` in `.env` (or Vercel). Without it,
+`/api/technical-analysis/[ticker]` returns `501` with a clear
+`AI_NOT_CONFIGURED` message — the calculated metrics are still fully
+computed, just not interpreted, since fabricating a fallback
+interpretation would defeat the point.
+
+Try it: `GET /api/technical-analysis/AAPL?period=1Y`, or click "Run
+Analysis" on a stock's dashboard page (it's on-demand, not automatic,
+since it calls a paid AI API on every run).
+
 ## Tests
 
 ```bash
@@ -128,10 +171,12 @@ npm run test:watch
 ```
 
 Covers the cache freshness/period-range logic (pure functions), the FMP
-provider's response parsing and error mapping (mocked `fetch`), and the
+provider's response parsing and error mapping (mocked `fetch`), the
 service layer's cache-hit/cache-miss/error-propagation behavior (mocked
-Prisma + provider). These are unit tests — a good next step is integration
-tests against a real test database.
+Prisma + provider), every technical indicator formula, and the Technical
+Analysis Agent's calculation/interpretation/error-handling behavior
+(mocked market-data service + Anthropic API). These are unit tests — a
+good next step is integration tests against a real test database.
 
 **Note on schema changes:** the build command uses `prisma db push
 --accept-data-loss`. This is appropriate here because `PriceBar`/`Quote`

@@ -26,9 +26,11 @@ const envSchema = z.object({
   ALPHA_VANTAGE_API_KEY: z.string().optional(),
   FINNHUB_API_KEY: z.string().optional(),
 
-  // Reserved for later phases (news, filings, AI analysis). Optional today.
+  // Reserved for later phases (news, filings). Optional today.
   NEWS_API_KEY: z.string().optional(),
   SEC_EDGAR_USER_AGENT: z.string().optional(),
+  // Powers the AI interpretation layer of the Technical Analysis Agent
+  // (src/server/agents/technical-analysis) and future AI agents.
   ANTHROPIC_API_KEY: z.string().optional(),
 
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),

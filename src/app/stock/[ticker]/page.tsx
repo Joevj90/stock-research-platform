@@ -4,6 +4,7 @@ import { TickerSearch } from "@/components/TickerSearch";
 import { StockChart } from "@/components/StockChart";
 import { MockDataBanner } from "@/components/MockDataBanner";
 import { PeriodSelector } from "@/components/PeriodSelector";
+import { TechnicalAnalysisPanel } from "@/components/TechnicalAnalysisPanel";
 import { HISTORICAL_PERIODS, type HistoricalPeriod, type StockSnapshot } from "@/lib/types";
 
 const COMING_SOON_SECTIONS = [
@@ -109,6 +110,8 @@ function DashboardContent({ snapshot }: { snapshot: StockSnapshot }) {
           {provenance.isMock ? " (mock)" : ""}
         </p>
       </section>
+
+      <TechnicalAnalysisPanel ticker={ticker} period={period} />
 
       <section>
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-gray-500">
