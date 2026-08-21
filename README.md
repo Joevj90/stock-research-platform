@@ -220,6 +220,52 @@ with raw ratios up front.
 Try it: `GET /api/fundamental-analysis/AAPL?period=annual`, or "Run
 Analysis" under Fundamental Analyst on a stock's page.
 
+## Competitor Analysis
+
+Determines whether a company is winning or losing against its real
+competitors, at `src/server/agents/competitor-analysis`.
+
+**Integration, not duplication:** competitor identification reuses
+`getPeerSymbols` (Step 8's real FMP peer lookup) rather than building a
+second discovery mechanism. Every company's metrics — the primary company
+and each candidate competitor — are computed by the exact same
+`computeCompanyMetricSet` function over real quote (Step 1) and
+financial-statement (Step 5) data, so every comparison is apples-to-apples.
+Critically, this agent does **not** trigger the separate, paid-AI
+Fundamental Analyst or Valuation Engine for each competitor — that would
+be both expensive (multiplying AI calls by the number of peers) and
+unnecessary, since this agent only needs the real underlying numbers, not
+another AI's opinion of them.
+
+**No fabricated market share:** this app has no real market-share data
+source. The system prompt explicitly forbids stating a specific
+market-share percentage; the AI may only say a company "appears to be
+gaining/losing ground" as an inference from real relative growth rates,
+always framed as an interpretation, never as a market-share statistic.
+
+**Genuinely relevant competitors, not just same-industry:** FMP's peers
+data is combined with the AI's general knowledge of what each candidate
+company actually does (same pattern as the Macro Analysis agent) — a
+candidate that turns out not to be a meaningful competitor can be
+excluded from the comparison entirely rather than forced in.
+
+**FACT / CALCULATION / AI INTERPRETATION / CONCLUSION:** `CompanyMetricSet`
+(revenue, growth rates, margins, ROE, simple P/E, etc.) is CALCULATION —
+deterministic, real, null when unavailable. Competitor selection reasons,
+the comparison table's leading/average/lagging/unavailable labels, the
+competitive score, and strengths/weaknesses/threat are AI INTERPRETATION.
+
+**Score is not an average:** the system prompt explicitly instructs
+weighting factors by what matters most to the company's specific
+industry, not averaging every metric equally.
+
+**UI:** "Who Is Winning?" leads, then the comparison table (Growth /
+Profitability / Financial Strength / Valuation / Competitive Position),
+score, strengths/weaknesses, and the single biggest competitive threat —
+kept deliberately simple per the spec.
+
+Try it: `GET /api/competitors/AAPL`.
+
 ## Macro Analysis
 
 Determines which broader economic conditions actually matter for a
@@ -497,13 +543,15 @@ the News Intelligence agent's FMP news parsing, service orchestration,
 and — notably — its anti-hallucination URL-verification guardrail, and
 the Valuation Engine's ratio math, historical/peer comparison, and —
 notably — 19 tests on the DCF engine alone (including directional sanity
-checks like "lower discount rate must produce a higher fair value"), and
-the Sentiment Analysis agent's reuse of shared indicator functions, its
+checks like "lower discount rate must produce a higher fair value"), the
+Sentiment Analysis agent's reuse of shared indicator functions, its
 graceful degradation when supporting data is unavailable, and its AI
-schema validation, and the Macro Analysis agent's real-indicator
-provenance, in-memory cache behavior, and company-specific relevance
-enforcement (281 tests total). These are unit tests — a good next
-step is integration tests against a real test database.
+schema validation, the Macro Analysis agent's real-indicator provenance,
+in-memory cache behavior, and company-specific relevance enforcement, and
+the Competitor Analysis agent's real-data metric calculations,
+competitor-relevance schema validation, and graceful degradation when
+peer identification fails (303 tests total). These are unit tests — a
+good next step is integration tests against a real test database.
 
 **Note on schema changes:** the build command uses `prisma db push
 --accept-data-loss`. This is appropriate here because `PriceBar`/`Quote`
