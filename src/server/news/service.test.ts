@@ -63,6 +63,7 @@ describe("getCompanyNews", () => {
   it("serves from the DB on a fresh cache hit, without calling the provider", async () => {
     (prisma.newsCacheEntry.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
       retrievedAt: new Date(),
+      provider: "mock",
     });
     (prisma.newsItem.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
       {

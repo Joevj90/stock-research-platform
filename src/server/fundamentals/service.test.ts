@@ -80,6 +80,7 @@ describe("getFundamentals", () => {
   it("serves from the DB on a fresh cache hit, without calling the provider", async () => {
     (prisma.fundamentalsCacheEntry.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
       retrievedAt: new Date(),
+      provider: "mock",
     });
     (prisma.financials.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
       {

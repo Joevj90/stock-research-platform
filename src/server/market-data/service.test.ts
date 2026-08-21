@@ -78,6 +78,7 @@ describe("getQuote", () => {
   it("serves from the DB on a fresh cache hit, without calling the provider", async () => {
     (prisma.marketDataCacheEntry.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
       retrievedAt: new Date(), // just now — well within the quote TTL
+      provider: "mock",
     });
     (prisma.quote.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue({
       price: SAMPLE_QUOTE.price,
@@ -112,6 +113,21 @@ describe("getQuote", () => {
     });
 
     await getQuote("AAPL");
+
+    expect(marketDataProvider.getQuote).toHaveBeenCalled();
+  });
+
+  it("calls the provider again when the cached entry came from a different provider (regression: switching MARKET_DATA_PROVIDER must not silently serve stale data from the old provider)", async () => {
+    (prisma.marketDataCacheEntry.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      retrievedAt: new Date(), // fresh by time, but from a different provider
+      provider: "fmp",
+    });
+    (marketDataProvider.getQuote as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      data: SAMPLE_QUOTE,
+    });
+
+    await getQuote("AAPL"); // mocked marketDataProvider.id is "mock" here
 
     expect(marketDataProvider.getQuote).toHaveBeenCalled();
   });
@@ -158,6 +174,7 @@ describe("getHistoricalPrices", () => {
   it("serves bars from the DB on a fresh cache hit, without calling the provider", async () => {
     (prisma.marketDataCacheEntry.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
       retrievedAt: new Date(),
+      provider: "mock",
     });
     (prisma.priceBar.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
       {

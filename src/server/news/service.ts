@@ -32,7 +32,7 @@ export async function getCompanyNews(rawTicker: string): Promise<Result<NewsArti
 
     const cacheEntry = await prisma.newsCacheEntry.findUnique({ where: { stockId: stock.id } });
 
-    if (cacheEntry && isFresh(cacheEntry.retrievedAt, NEWS_CACHE_TTL_MS)) {
+    if (cacheEntry && cacheEntry.provider === newsProvider.id && isFresh(cacheEntry.retrievedAt, NEWS_CACHE_TTL_MS)) {
       const rows = await prisma.newsItem.findMany({
         where: { stockId: stock.id },
         orderBy: { publishedAt: "desc" },

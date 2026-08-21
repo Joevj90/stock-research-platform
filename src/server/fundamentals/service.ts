@@ -50,7 +50,7 @@ export async function getFundamentals(
 
     let periods: FinancialPeriod[];
 
-    if (cacheEntry && isFresh(cacheEntry.retrievedAt, FUNDAMENTALS_CACHE_TTL_MS)) {
+    if (cacheEntry && cacheEntry.provider === fundamentalsProvider.id && isFresh(cacheEntry.retrievedAt, FUNDAMENTALS_CACHE_TTL_MS)) {
       const rows = await prisma.financials.findMany({
         where: { stockId: stock.id, periodType },
         orderBy: { periodEnd: "asc" },

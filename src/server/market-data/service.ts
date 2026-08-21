@@ -56,7 +56,7 @@ export async function getQuote(rawTicker: string): Promise<Result<Quote>> {
       },
     });
 
-    if (cacheEntry && isFresh(cacheEntry.retrievedAt, QUOTE_CACHE_TTL_MS)) {
+    if (cacheEntry && cacheEntry.provider === marketDataProvider.id && isFresh(cacheEntry.retrievedAt, QUOTE_CACHE_TTL_MS)) {
       const cached = await prisma.quote.findFirst({
         where: { stockId: stock.id },
         orderBy: { retrievedAt: "desc" },
@@ -134,7 +134,7 @@ export async function getHistoricalPrices(
       where: { stockId_dataType_period: { stockId: stock.id, dataType: "historical", period } },
     });
 
-    if (cacheEntry && isFresh(cacheEntry.retrievedAt, HISTORICAL_CACHE_TTL_MS)) {
+    if (cacheEntry && cacheEntry.provider === marketDataProvider.id && isFresh(cacheEntry.retrievedAt, HISTORICAL_CACHE_TTL_MS)) {
       const bars = await prisma.priceBar.findMany({
         where: { stockId: stock.id, interval: "1d", timestamp: { gte: from, lte: to } },
         orderBy: { timestamp: "asc" },
