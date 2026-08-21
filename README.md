@@ -220,6 +220,56 @@ with raw ratios up front.
 Try it: `GET /api/fundamental-analysis/AAPL?period=annual`, or "Run
 Analysis" under Fundamental Analyst on a stock's page.
 
+## Macro Analysis
+
+Determines which broader economic conditions actually matter for a
+specific company — not a generic economic report — at
+`src/server/agents/macro-analysis`, built on a new small data domain at
+`src/server/macro`.
+
+**A genuinely new data domain, handled correctly:** economic indicators
+(GDP growth, inflation/CPI, unemployment rate, the 10-year Treasury
+yield as an interest-rate proxy) aren't tied to any specific company —
+they're the same for every ticker. Rather than shoehorning them into the
+existing per-stock caching pattern, `src/server/macro/service.ts` uses a
+simple in-memory, process-wide cache instead of a database table — the
+architecturally correct shape for global data, and it avoids an
+unnecessary schema change. Real data via FMP's Economic Indicators and
+Treasury Rates endpoints, each figure retaining its source, URL,
+publication date, and retrieval date (see `MacroIndicator` in
+`src/lib/macro-types.ts`).
+
+**Company-specific by construction:** the agent pulls the company name
+via `getStockSnapshot` (Step 1, free, no new data source) and passes both
+the ticker and real indicators to the AI, instructed that its whole job
+is "which of these conditions matter for THIS company" — not to force
+every indicator into the analysis. The AI is explicitly permitted to use
+its general knowledge of what business a company is in (that a bank
+cares about interest rates and credit conditions, a retailer cares about
+consumer spending, differently than an oil company cares about commodity
+prices) to judge relevance — but is barred from fabricating any specific
+economic statistic beyond what it was actually given.
+
+**FACT / CALCULATION / AI INTERPRETATION / FORECAST:** the indicators
+are FACT (sourced, dated, real). There's no numeric derivation step in
+this agent (macro figures are used as-is), so nothing here is presented
+as a FORECAST — `timeHorizon` and risk descriptions are framed as
+possibilities. Only the relevance judgment, score, and explanations are
+AI INTERPRETATION.
+
+**Score is not an average:** the system prompt explicitly instructs
+weighting factors by how much they matter to this specific company
+rather than averaging every given indicator equally.
+
+**UI:** FAVORABLE/NEUTRAL/UNFAVORABLE + score lead, then "What's
+Helping?" / "What's Hurting?", the single biggest economic risk
+highlighted, then 2-5 other risks to watch — deliberately light on raw
+statistics, per the spec.
+
+Try it: `GET /api/macro/JPM` (works for any ticker, but the answer will
+differ meaningfully by company — e.g. interest rates matter far more for
+a bank than for a retailer).
+
 ## Sentiment Analysis
 
 Judges how investors currently feel about the company, at
@@ -450,7 +500,9 @@ notably — 19 tests on the DCF engine alone (including directional sanity
 checks like "lower discount rate must produce a higher fair value"), and
 the Sentiment Analysis agent's reuse of shared indicator functions, its
 graceful degradation when supporting data is unavailable, and its AI
-schema validation (258 tests total). These are unit tests — a good next
+schema validation, and the Macro Analysis agent's real-indicator
+provenance, in-memory cache behavior, and company-specific relevance
+enforcement (281 tests total). These are unit tests — a good next
 step is integration tests against a real test database.
 
 **Note on schema changes:** the build command uses `prisma db push

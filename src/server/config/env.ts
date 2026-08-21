@@ -35,6 +35,9 @@ const envSchema = z.object({
   // fundamentals). Separate switch on purpose — see market-data/provider.ts
   // and fundamentals/provider.ts for why these are kept independent.
   NEWS_DATA_PROVIDER: z.enum(["mock", "fmp"]).default("mock"),
+
+  // Macro/economic indicator provider selection, reuses FMP_API_KEY.
+  MACRO_DATA_PROVIDER: z.enum(["mock", "fmp"]).default("mock"),
   ALPHA_VANTAGE_API_KEY: z.string().optional(),
   FINNHUB_API_KEY: z.string().optional(),
 
