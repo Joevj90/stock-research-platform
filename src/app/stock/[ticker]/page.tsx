@@ -6,6 +6,7 @@ import { MockDataBanner } from "@/components/MockDataBanner";
 import { PeriodSelector } from "@/components/PeriodSelector";
 import { TechnicalAnalysisPanel } from "@/components/TechnicalAnalysisPanel";
 import { FundamentalsPanel } from "@/components/FundamentalsPanel";
+import { FundamentalAnalystPanel } from "@/components/FundamentalAnalystPanel";
 import { HISTORICAL_PERIODS, type HistoricalPeriod, type StockSnapshot } from "@/lib/types";
 
 const COMING_SOON_SECTIONS = [
@@ -115,6 +116,8 @@ function DashboardContent({ snapshot }: { snapshot: StockSnapshot }) {
       <TechnicalAnalysisPanel ticker={ticker} period={period} />
 
       <FundamentalsPanel ticker={ticker} />
+
+      <FundamentalAnalystPanel ticker={ticker} periodType="annual" />
 
       <section>
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-gray-500">

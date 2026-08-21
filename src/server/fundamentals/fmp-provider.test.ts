@@ -133,6 +133,16 @@ describe("FmpFundamentalsProvider", () => {
     if (!result.ok) expect(result.error.code).toBe("PROVIDER_AUTH_ERROR");
   });
 
+  it("maps HTTP 402 to PROVIDER_PLAN_REQUIRED with a clear upgrade message", async () => {
+    mockFetchSequence([{ status: 402, body: {} }]);
+    const result = await provider.getFinancials("AAPL", "annual", 5);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("PROVIDER_PLAN_REQUIRED");
+      expect(result.error.message).toContain("paid FMP plan");
+    }
+  });
+
   it("maps HTTP 429 to a rate-limit error", async () => {
     mockFetchSequence([{ status: 429, body: {} }]);
     const result = await provider.getFinancials("AAPL", "annual", 5);

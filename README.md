@@ -120,6 +120,59 @@ enough to keep a personal project off search engines and away from casual
 visitors, not a substitute for real auth if this app ever holds
 multi-user or sensitive data.
 
+## Fundamental Analyst AI
+
+The first agent to interpret Step 5's financial data, at
+`src/server/agents/fundamental-analyst`. Judges how financially healthy a
+company appears — revenue/earnings/EPS growth, margins, free cash flow,
+debt relative to earnings, ROE, ROIC, asset efficiency, and earnings
+quality — from real reported data, never invented numbers.
+
+**Integration, not duplication:** the service calls `getFundamentals` from
+`@/server/fundamentals` — Step 5's own public barrel — and never imports a
+provider or touches the database directly. Margins are reused from Step
+5's `computeFinancialRatios`; this layer only adds what Step 5 didn't
+already compute (growth rates, ROE, ROIC, debt coverage, asset turnover,
+earnings quality).
+
+**FACT / CALCULATION / AI INTERPRETATION / CONCLUSION**, mapped onto the
+code:
+- **FACT** — the raw reported figures in Step 5's `FinancialPeriod[]`,
+  never duplicated here.
+- **CALCULATION** — `CalculatedFundamentalMetrics` (`src/server/agents/
+  fundamental-analyst/metrics.ts`): pure, deterministic derived numbers.
+  A metric that can't be computed from the available data is `null`,
+  never a guess.
+- **AI INTERPRETATION** — the seven `*Assessment` fields (revenue,
+  earnings, profitability, cash flow, balance sheet, growth, financial
+  strength), each following the required WHAT HAPPENED? / WHY IT
+  MATTERS? / IS IT GOOD OR BAD? structure.
+- **CONCLUSION** — `overallConclusion`, the single synthesizing statement.
+
+**Never invents numbers:** the system prompt (`interpreter.ts`) instructs
+Claude to use only the given figures and explicitly say "Data
+unavailable." for anything null, rather than filling gaps — and every
+number the AI sees was computed deterministically in code before the AI
+ever runs, so there's nothing for it to hallucinate from.
+
+**Plain-language requirement:** every explanation defines financial terms
+inline in the same or next sentence (e.g. "the company took on more debt
+compared with the money it generates, which increases financial risk"),
+enforced by the system prompt and checked by the interpreter tests.
+
+**Scoring:** `overallFundamentalScore` (-100..100) is explicitly instructed
+to weigh evidence by importance rather than average the individual
+metrics, with `overallConclusion` explaining the reasoning behind it.
+
+**UI:** the AI's conclusion, score, and positive/negative factors lead;
+the seven detailed assessments come next; the full calculated numbers
+table (explicitly labeled "Calculation") is tucked behind a "Show
+supporting financial details" toggle so a non-expert isn't confronted
+with raw ratios up front.
+
+Try it: `GET /api/fundamental-analysis/AAPL?period=annual`, or "Run
+Analysis" under Fundamental Analyst on a stock's page.
+
 ## Fundamental Financial Data
 
 The financial-statement data layer, at `src/server/fundamentals`. Retrieves
@@ -227,11 +280,13 @@ provider's response parsing and error mapping (mocked `fetch`), the
 service layer's cache-hit/cache-miss/error-propagation behavior (mocked
 Prisma + provider), every technical indicator formula, the Technical
 Analysis Agent's calculation/interpretation/error-handling behavior
-(mocked market-data service + Anthropic API), and the fundamentals
-layer's validation rules, ratio math, plain-English explanation
-generation, FMP statement parsing, and service orchestration. These are
-unit tests — a good next step is integration tests against a real test
-database.
+(mocked market-data service + Anthropic API), the fundamentals layer's
+validation rules, ratio math, plain-English explanation generation, FMP
+statement parsing, and service orchestration, and the Fundamental
+Analyst's growth/ROE/ROIC/earnings-quality calculations, AI response
+schema validation, and no-fabrication enforcement (148 tests total).
+These are unit tests — a good next step is integration tests against a
+real test database.
 
 **Note on schema changes:** the build command uses `prisma db push
 --accept-data-loss`. This is appropriate here because `PriceBar`/`Quote`

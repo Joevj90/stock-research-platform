@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getFundamentals } from "@/server/fundamentals";
+import { runFundamentalAnalysis } from "@/server/agents/fundamental-analyst";
 import { logger } from "@/server/logger";
 import type { FinancialPeriodType } from "@/lib/fundamentals-types";
 
-const log = logger.child("api:fundamentals");
+const log = logger.child("api:fundamental-analysis");
 
 const STATUS_BY_ERROR_CODE: Record<string, number> = {
   MISSING_TICKER: 400,
   INVALID_TICKER: 404,
   INVALID_PERIOD_TYPE: 400,
+  INSUFFICIENT_DATA: 422,
   INTERNAL_ERROR: 500,
   PROVIDER_AUTH_ERROR: 502,
   PROVIDER_RATE_LIMITED: 429,
@@ -16,6 +17,13 @@ const STATUS_BY_ERROR_CODE: Record<string, number> = {
   PROVIDER_TIMEOUT: 504,
   PROVIDER_UNREACHABLE: 502,
   PROVIDER_ERROR: 502,
+  AI_NOT_CONFIGURED: 501,
+  AI_AUTH_ERROR: 502,
+  AI_RATE_LIMITED: 429,
+  AI_TIMEOUT: 504,
+  AI_UNREACHABLE: 502,
+  AI_PROVIDER_ERROR: 502,
+  AI_PARSE_ERROR: 502,
 };
 
 function isPeriodType(value: string): value is FinancialPeriodType {
@@ -32,11 +40,11 @@ export async function GET(req: NextRequest, { params }: { params: { ticker: stri
     );
   }
 
-  const result = await getFundamentals(params.ticker, periodTypeParam);
+  const result = await runFundamentalAnalysis(params.ticker, periodTypeParam);
 
   if (!result.ok) {
     const status = STATUS_BY_ERROR_CODE[result.error.code] ?? 502;
-    log.warn("fundamentals request failed", { ticker: params.ticker, error: result.error });
+    log.warn("fundamental analysis request failed", { ticker: params.ticker, error: result.error });
     return NextResponse.json({ error: result.error }, { status });
   }
 
