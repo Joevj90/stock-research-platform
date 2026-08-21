@@ -3,10 +3,10 @@ import { getStockSnapshot } from "@/server/market-data";
 import { TickerSearch } from "@/components/TickerSearch";
 import { PriceChart } from "@/components/PriceChart";
 import { MockDataBanner } from "@/components/MockDataBanner";
-import type { StockSnapshot } from "@/lib/types";
+import { PeriodSelector } from "@/components/PeriodSelector";
+import { HISTORICAL_PERIODS, type HistoricalPeriod, type StockSnapshot } from "@/lib/types";
 
 const COMING_SOON_SECTIONS = [
-  { title: "Fundamentals", detail: "Financial statements & ratios" },
   { title: "SEC Filings", detail: "10-K, 10-Q, 8-K retrieval" },
   { title: "News & Sentiment", detail: "Recent coverage, sentiment score" },
   { title: "Valuation", detail: "DCF / comps-based valuation" },
@@ -20,8 +20,22 @@ const COMING_SOON_SECTIONS = [
   { title: "Final Report", detail: "Cited, confidence-scored synthesis" },
 ];
 
-export default async function StockPage({ params }: { params: { ticker: string } }) {
-  const result = await getStockSnapshot(params.ticker);
+function parsePeriod(value: string | undefined): HistoricalPeriod {
+  if (value && (HISTORICAL_PERIODS as string[]).includes(value)) {
+    return value as HistoricalPeriod;
+  }
+  return "6M";
+}
+
+export default async function StockPage({
+  params,
+  searchParams,
+}: {
+  params: { ticker: string };
+  searchParams: { period?: string };
+}) {
+  const period = parsePeriod(searchParams.period);
+  const result = await getStockSnapshot(params.ticker, period);
 
   return (
     <main className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-8">
@@ -45,7 +59,7 @@ export default async function StockPage({ params }: { params: { ticker: string }
 }
 
 function DashboardContent({ snapshot }: { snapshot: StockSnapshot }) {
-  const { ticker, companyName, quote, history, provenance } = snapshot;
+  const { ticker, companyName, quote, history, period, provenance } = snapshot;
   const isUp = quote.change >= 0;
 
   return (
@@ -68,7 +82,14 @@ function DashboardContent({ snapshot }: { snapshot: StockSnapshot }) {
           </div>
         </div>
 
-        <div className="mt-6">
+        <div className="mt-4 flex items-center justify-between">
+          <span className="text-xs uppercase tracking-wide text-gray-500">
+            {period} history
+          </span>
+          <PeriodSelector current={period} />
+        </div>
+
+        <div className="mt-3">
           <PriceChart bars={history} />
         </div>
 
@@ -77,6 +98,10 @@ function DashboardContent({ snapshot }: { snapshot: StockSnapshot }) {
           <Stat label="Day Low" value={`$${quote.dayLow.toFixed(2)}`} />
           <Stat label="Prev Close" value={`$${quote.previousClose.toFixed(2)}`} />
           <Stat label="Volume" value={quote.volume.toLocaleString()} />
+          <Stat label="Market Cap" value={formatMarketCap(quote.marketCap)} />
+          <Stat label="52-Week High" value={formatMoney(quote.week52High)} />
+          <Stat label="52-Week Low" value={formatMoney(quote.week52Low)} />
+          <Stat label="Avg Volume" value={quote.avgVolume ? quote.avgVolume.toLocaleString() : "—"} />
         </dl>
 
         <p className="mt-4 text-xs text-gray-500">
@@ -112,4 +137,16 @@ function Stat({ label, value }: { label: string; value: string }) {
       <dd className="tabular-nums text-gray-200">{value}</dd>
     </div>
   );
+}
+
+function formatMoney(value: number | null): string {
+  return value === null ? "—" : `$${value.toFixed(2)}`;
+}
+
+function formatMarketCap(value: number | null): string {
+  if (value === null) return "—";
+  if (value >= 1e12) return `$${(value / 1e12).toFixed(2)}T`;
+  if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
+  if (value >= 1e6) return `$${(value / 1e6).toFixed(2)}M`;
+  return `$${value.toLocaleString()}`;
 }

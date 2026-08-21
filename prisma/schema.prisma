@@ -26,34 +26,90 @@ model Stock {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  priceBars  PriceBar[]
-  financials Financials[]
-  filings    Filing[]
-  newsItems  NewsItem[]
-  analyses   Analysis[]
-  forecasts  Forecast[]
+  priceBars    PriceBar[]
+  quotes       Quote[]
+  cacheEntries MarketDataCacheEntry[]
+  financials   Financials[]
+  filings      Filing[]
+  newsItems    NewsItem[]
+  analyses     Analysis[]
+  forecasts    Forecast[]
 
   @@map("stocks")
 }
 
-/// A single OHLCV bar (daily by default). Source of historical + current price data.
+/// A single OHLCV bar (daily by default). Source of historical price data.
+/// `provider` + `retrievedAt` + the Stock relation (ticker) together satisfy
+/// the "every piece of market data has a source, retrieval timestamp, and
+/// ticker" requirement at the row level.
 model PriceBar {
-  id        String   @id @default(cuid())
-  stockId   String
-  stock     Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
-  timestamp DateTime
-  open      Float
-  high      Float
-  low       Float
-  close     Float
-  volume    Float
-  interval  String // "1d" | "1wk" | "1mo" (extendable to intraday later)
-  provider  String // e.g. "mock", "alpha_vantage", "finnhub"
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  stockId     String
+  stock       Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  timestamp   DateTime
+  open        Float
+  high        Float
+  low         Float
+  close       Float
+  volume      Float
+  interval    String // "1d" | "1wk" | "1mo" (extendable to intraday later)
+  provider    String // e.g. "mock", "fmp", "alpha_vantage", "finnhub"
+  retrievedAt DateTime @default(now())
 
   @@unique([stockId, timestamp, interval])
   @@index([stockId, timestamp])
   @@map("price_bars")
+}
+
+/// A point-in-time quote/fundamentals snapshot (price, previous close,
+/// market cap, 52-week high/low, average volume). One row per fetch, so
+/// `quote history` is naturally preserved rather than overwritten.
+model Quote {
+  id            String   @id @default(cuid())
+  stockId       String
+  stock         Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  price         Float
+  change        Float
+  changePercent Float
+  dayHigh       Float
+  dayLow        Float
+  previousClose Float
+  volume        Float
+  marketCap     Float?
+  week52High    Float?
+  week52Low     Float?
+  avgVolume     Float?
+  provider      String
+  retrievedAt   DateTime @default(now())
+
+  @@index([stockId, retrievedAt])
+  @@map("quotes")
+}
+
+/// The cache index for market-data fetches. One row per (stock, data type,
+/// period) tracks when that slice of data was last retrieved from an
+/// external provider, so the market-data service can decide "serve from DB"
+/// vs. "call the provider again" without re-deriving coverage from the raw
+/// PriceBar/Quote rows every time. This is also the explicit, queryable
+/// record of source + retrieval timestamp + ticker + period for every piece
+/// of market data the app has ever fetched.
+model MarketDataCacheEntry {
+  id          String    @id @default(cuid())
+  stockId     String
+  stock       Stock     @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  dataType    String // "quote" | "historical"
+  // HistoricalPeriod ("1M".."5Y") for dataType "historical"; the sentinel
+  // "REALTIME" for dataType "quote". Deliberately non-null: Postgres treats
+  // NULL as distinct in unique constraints, which would silently break the
+  // one-row-per-(stock,dataType) guarantee for quotes if this were nullable.
+  period      String
+  provider    String
+  retrievedAt DateTime  @default(now())
+  rangeStart  DateTime?
+  rangeEnd    DateTime?
+
+  @@unique([stockId, dataType, period])
+  @@map("market_data_cache_entries")
 }
 
 /// A reported financial statement period (income/balance/cashflow summary).

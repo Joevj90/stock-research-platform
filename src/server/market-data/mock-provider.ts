@@ -15,12 +15,12 @@ const log = logger.child("market-data:mock");
  * company.
  *
  * Every value this provider returns is wrapped with `isMock: true`
- * provenance one layer up (see `index.ts` / API routes) so the UI can — and
- * must — visibly label it as mock data. Do not remove that labeling when
- * wiring in a real provider.
+ * provenance one layer up (see `service.ts` / API routes) so the UI can —
+ * and must — visibly label it as mock data. Do not remove that labeling
+ * when wiring in a real provider.
  *
- * Swap this out by setting MARKET_DATA_PROVIDER=alpha_vantage (or similar)
- * and implementing a matching class against `MarketDataProvider`.
+ * Set MARKET_DATA_PROVIDER=fmp (or another implemented provider) to use
+ * real data instead.
  */
 export class MockMarketDataProvider implements MarketDataProvider {
   readonly id = "mock" as const;
@@ -43,6 +43,8 @@ export class MockMarketDataProvider implements MarketDataProvider {
     const changePercent = (rng() - 0.5) * 6; // -3%..+3%
     const change = basePrice * (changePercent / 100);
     const previousClose = basePrice - change;
+    const avgVolume = Math.floor(500_000 + rng() * 20_000_000);
+    const week52Spread = basePrice * (0.2 + rng() * 0.3);
 
     const quote: Quote = {
       ticker: ticker.toUpperCase(),
@@ -53,6 +55,10 @@ export class MockMarketDataProvider implements MarketDataProvider {
       dayLow: round2(basePrice * (1 - rng() * 0.015)),
       previousClose: round2(previousClose),
       volume: Math.floor(500_000 + rng() * 20_000_000),
+      marketCap: Math.floor(basePrice * (1_000_000 + rng() * 5_000_000_000)),
+      week52High: round2(basePrice + week52Spread * rng()),
+      week52Low: round2(Math.max(1, basePrice - week52Spread * rng())),
+      avgVolume,
       asOf: new Date().toISOString(),
     };
 
@@ -60,18 +66,20 @@ export class MockMarketDataProvider implements MarketDataProvider {
     return { ok: true, data: quote };
   }
 
-  async getHistory(ticker: string, days: number): Promise<Result<PriceBar[]>> {
+  async getHistory(ticker: string, from: Date, to: Date): Promise<Result<PriceBar[]>> {
     const validation = validateTicker(ticker);
     if (!validation.ok) return validation;
 
     const rng = seededRng(ticker);
     let price = 20 + rng() * 480;
     const bars: PriceBar[] = [];
-    const now = new Date();
 
-    for (let i = days - 1; i >= 0; i--) {
-      const date = new Date(now);
-      date.setDate(date.getDate() - i);
+    const days = Math.max(1, Math.round((to.getTime() - from.getTime()) / 86_400_000));
+
+    for (let i = 0; i <= days; i++) {
+      const date = new Date(from);
+      date.setDate(date.getDate() + i);
+      if (date > to) break;
 
       // Simple random walk with mild drift, deterministic per ticker+day.
       const drift = (rng() - 0.48) * 0.02;
@@ -93,7 +101,7 @@ export class MockMarketDataProvider implements MarketDataProvider {
       });
     }
 
-    log.debug("generated mock history", { ticker, days });
+    log.debug("generated mock history", { ticker, from, to, bars: bars.length });
     return { ok: true, data: bars };
   }
 }

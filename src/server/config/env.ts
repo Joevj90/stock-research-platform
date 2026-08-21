@@ -19,7 +19,10 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
 
   // Market data provider selection + credentials. MOCK requires no key.
-  MARKET_DATA_PROVIDER: z.enum(["mock", "alpha_vantage", "finnhub"]).default("mock"),
+  // "fmp" (Financial Modeling Prep) is the implemented real provider — see
+  // src/server/market-data/fmp-provider.ts for why it was chosen.
+  MARKET_DATA_PROVIDER: z.enum(["mock", "fmp", "alpha_vantage", "finnhub"]).default("mock"),
+  FMP_API_KEY: z.string().optional(),
   ALPHA_VANTAGE_API_KEY: z.string().optional(),
   FINNHUB_API_KEY: z.string().optional(),
 
@@ -29,6 +32,13 @@ const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
 
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
+
+  // Optional site-wide password gate (see src/middleware.ts). Unset = app
+  // stays fully open. This mirrors what middleware.ts reads from
+  // process.env directly for the Edge runtime; declared here too so the
+  // login API route (which runs in the Node runtime) gets the same
+  // validated value.
+  SITE_PASSWORD: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

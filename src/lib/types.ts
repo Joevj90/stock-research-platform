@@ -22,10 +22,38 @@ export interface Quote {
   dayLow: number;
   previousClose: number;
   volume: number;
+  marketCap: number | null;
+  week52High: number | null;
+  week52Low: number | null;
+  avgVolume: number | null;
   asOf: string; // ISO 8601
 }
 
-export type DataProviderId = "mock" | "alpha_vantage" | "finnhub";
+export type DataProviderId = "mock" | "fmp" | "alpha_vantage" | "finnhub";
+
+/**
+ * The supported historical lookback windows. This is the single source of
+ * truth for "period" everywhere in the app — the UI period selector, the
+ * API's ?period= query param, and the market-data cache all key off this
+ * type, so adding a new window later means extending one map, not hunting
+ * down every place a window was hardcoded.
+ */
+export type HistoricalPeriod = "1M" | "3M" | "6M" | "1Y" | "3Y" | "5Y";
+
+export const HISTORICAL_PERIODS: HistoricalPeriod[] = ["1M", "3M", "6M", "1Y", "3Y", "5Y"];
+
+/** Approximate calendar days to look back for each period (used to compute
+ * the from/to date range sent to the provider). Deliberately calendar days,
+ * not trading days — providers accept a date range and return whatever
+ * trading days fall inside it. */
+export const PERIOD_TO_DAYS: Record<HistoricalPeriod, number> = {
+  "1M": 31,
+  "3M": 93,
+  "6M": 186,
+  "1Y": 366,
+  "3Y": 3 * 366,
+  "5Y": 5 * 366,
+};
 
 /**
  * Every payload the market-data layer returns is tagged with provenance so
@@ -36,6 +64,9 @@ export interface Provenance {
   provider: DataProviderId;
   isMock: boolean;
   fetchedAt: string; // ISO 8601
+  /** True if this response was served from the local cache/DB rather than
+   * a fresh call to the external provider. */
+  fromCache: boolean;
 }
 
 export interface StockSnapshot {
@@ -43,6 +74,7 @@ export interface StockSnapshot {
   companyName: string;
   quote: Quote;
   history: PriceBar[];
+  period: HistoricalPeriod;
   provenance: Provenance;
 }
 
