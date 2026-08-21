@@ -133,6 +133,14 @@ service layer's cache-hit/cache-miss/error-propagation behavior (mocked
 Prisma + provider). These are unit tests — a good next step is integration
 tests against a real test database.
 
+**Note on schema changes:** the build command uses `prisma db push
+--accept-data-loss`. This is appropriate here because `PriceBar`/`Quote`
+rows are a re-fetchable cache, not primary data — if a schema change ever
+requires dropping a column with existing data, losing cached price history
+is harmless (it's refetched from the provider on the next request). If
+this app later stores data that must never be dropped without review,
+switch to `prisma migrate deploy` with reviewed migration files instead.
+
 ## Deploying to Vercel
 
 1. **Push this project to a GitHub repo** (create a new repo, then from this

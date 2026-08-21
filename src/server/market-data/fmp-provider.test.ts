@@ -42,7 +42,7 @@ describe("FmpMarketDataProvider", () => {
         name: "Apple Inc.",
         price: 227.5,
         change: -1.25,
-        changesPercentage: -0.55,
+        changePercentage: -0.55,
         dayHigh: 229.1,
         dayLow: 226.0,
         previousClose: 228.75,
@@ -101,15 +101,12 @@ describe("FmpMarketDataProvider", () => {
     }
   });
 
-  it("parses historical bars oldest-first regardless of FMP's response order", async () => {
-    mockFetchOnce(200, {
-      symbol: "AAPL",
-      historical: [
-        { date: "2026-08-20", open: 227, high: 229, low: 226, close: 227.5, volume: 100 },
-        { date: "2026-08-19", open: 225, high: 228, low: 224, close: 227, volume: 90 },
-        { date: "2026-08-18", open: 224, high: 226, low: 223, close: 225, volume: 80 },
-      ],
-    });
+  it("parses historical bars (flat array response) oldest-first regardless of FMP's order", async () => {
+    mockFetchOnce(200, [
+      { symbol: "AAPL", date: "2026-08-20", open: 227, high: 229, low: 226, close: 227.5, volume: 100 },
+      { symbol: "AAPL", date: "2026-08-19", open: 225, high: 228, low: 224, close: 227, volume: 90 },
+      { symbol: "AAPL", date: "2026-08-18", open: 224, high: 226, low: 223, close: 225, volume: 80 },
+    ]);
 
     const result = await provider.getHistory(
       "AAPL",
@@ -125,7 +122,14 @@ describe("FmpMarketDataProvider", () => {
     }
   });
 
-  it("treats a missing historical field as an invalid ticker", async () => {
+  it("treats an empty historical array as an invalid ticker", async () => {
+    mockFetchOnce(200, []);
+    const result = await provider.getHistory("ZZZZZ", new Date("2026-01-01"), new Date("2026-01-31"));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("INVALID_TICKER");
+  });
+
+  it("treats a bare {symbol} object (no price rows) as an invalid ticker", async () => {
     mockFetchOnce(200, { symbol: "ZZZZZ" });
     const result = await provider.getHistory("ZZZZZ", new Date("2026-01-01"), new Date("2026-01-31"));
     expect(result.ok).toBe(false);

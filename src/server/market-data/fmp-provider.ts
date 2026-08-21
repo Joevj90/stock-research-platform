@@ -6,10 +6,26 @@ const log = logger.child("market-data:fmp");
 
 // FMP retired the legacy /api/v3/ surface for new accounts in favor of a
 // flatter /stable/ API (different base path, and historical data returns
-// a plain array instead of a {historical: [...]} wrapper).
+// a plain array instead of a {historical: [...]} wrapper). Confirmed
+// against FMP's own quickstart docs — see the chat writeup.
 const FMP_BASE_URL = "https://financialmodelingprep.com/stable";
 const FETCH_TIMEOUT_MS = 10_000;
 
+/**
+ * Financial Modeling Prep provider — the real, non-mock market-data source.
+ *
+ * Why FMP (see the chat writeup for the full comparison): its `/quote`
+ * endpoint returns price, previous close, day high/low, market cap,
+ * 52-week high/low, and average volume in a single call, and its
+ * `/historical-price-eod/full` endpoint takes an arbitrary date range —
+ * both map cleanly onto this app's exact field and period requirements.
+ *
+ * This class only knows how to talk to FMP and translate its responses
+ * into this app's domain types (PriceBar, Quote). It has no idea what a
+ * "period" is, doesn't cache anything, and doesn't touch the database —
+ * that's `service.ts`'s job. Keeping this class this narrow is what makes
+ * swapping providers later a one-file change.
+ */
 export class FmpMarketDataProvider implements MarketDataProvider {
   readonly id = "fmp" as const;
   readonly isMock = false;
@@ -85,6 +101,10 @@ export class FmpMarketDataProvider implements MarketDataProvider {
     );
     if (!result.ok) return result;
 
+    // The stable API returns a flat array. If FMP can't find the ticker it
+    // returns an empty array or a bare {symbol} object with no price rows
+    // — treat either as an invalid ticker rather than silently returning
+    // no data.
     if (!Array.isArray(result.data) || result.data.length === 0) {
       return {
         ok: false,
@@ -92,6 +112,7 @@ export class FmpMarketDataProvider implements MarketDataProvider {
       };
     }
 
+    // FMP returns most-recent-first; the app's convention is oldest-first.
     const bars: PriceBar[] = result.data
       .map((r) => ({
         timestamp: new Date(r.date).toISOString(),
@@ -146,6 +167,8 @@ export class FmpMarketDataProvider implements MarketDataProvider {
 
       const json = (await res.json()) as unknown;
 
+      // FMP signals some errors (bad ticker, bad param) with HTTP 200 and a
+      // body like {"Error Message": "..."}
       if (json && typeof json === "object" && !Array.isArray(json) && "Error Message" in json) {
         return {
           ok: false,
@@ -194,7 +217,9 @@ interface FmpQuoteResponse {
   name?: string;
   price?: number;
   change?: number;
+  /** Field name on the current /stable/quote endpoint. */
   changePercentage?: number;
+  /** Older field name, kept as a fallback in case FMP serves either. */
   changesPercentage?: number;
   dayHigh?: number;
   dayLow?: number;
@@ -208,7 +233,7 @@ interface FmpQuoteResponse {
 
 interface FmpHistoricalRow {
   symbol?: string;
-  date: string;
+  date: string; // "YYYY-MM-DD"
   open: number;
   high: number;
   low: number;

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { getStockSnapshot } from "@/server/market-data";
 import { TickerSearch } from "@/components/TickerSearch";
-import { PriceChart } from "@/components/PriceChart";
+import { StockChart } from "@/components/StockChart";
 import { MockDataBanner } from "@/components/MockDataBanner";
 import { PeriodSelector } from "@/components/PeriodSelector";
 import { HISTORICAL_PERIODS, type HistoricalPeriod, type StockSnapshot } from "@/lib/types";
@@ -90,7 +90,7 @@ function DashboardContent({ snapshot }: { snapshot: StockSnapshot }) {
         </div>
 
         <div className="mt-3">
-          <PriceChart bars={history} />
+          <StockChart bars={history} />
         </div>
 
         <dl className="mt-6 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
