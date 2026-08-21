@@ -4,24 +4,12 @@ import { logger } from "@/server/logger";
 
 const log = logger.child("market-data:fmp");
 
-const FMP_BASE_URL = "https://financialmodelingprep.com/api/v3";
+// FMP retired the legacy /api/v3/ surface for new accounts in favor of a
+// flatter /stable/ API (different base path, and historical data returns
+// a plain array instead of a {historical: [...]} wrapper).
+const FMP_BASE_URL = "https://financialmodelingprep.com/stable";
 const FETCH_TIMEOUT_MS = 10_000;
 
-/**
- * Financial Modeling Prep provider — the real, non-mock market-data source.
- *
- * Why FMP (see the chat writeup for the full comparison): its `/quote`
- * endpoint returns price, previous close, day high/low, market cap,
- * 52-week high/low, and average volume in a single call, and its
- * `/historical-price-full` endpoint takes an arbitrary date range — both
- * map cleanly onto this app's exact field and period requirements.
- *
- * This class only knows how to talk to FMP and translate its responses
- * into this app's domain types (PriceBar, Quote). It has no idea what a
- * "period" is, doesn't cache anything, and doesn't touch the database —
- * that's `service.ts`'s job. Keeping this class this narrow is what makes
- * swapping providers later a one-file change.
- */
 export class FmpMarketDataProvider implements MarketDataProvider {
   readonly id = "fmp" as const;
   readonly isMock = false;
@@ -39,7 +27,7 @@ export class FmpMarketDataProvider implements MarketDataProvider {
     const validation = validateTicker(ticker);
     if (!validation.ok) return validation;
 
-    const result = await this.fetchJson<FmpQuoteResponse[]>(`/quote/${ticker}`);
+    const result = await this.fetchJson<FmpQuoteResponse[]>("/quote", { symbol: ticker });
     if (!result.ok) return result;
 
     const row = result.data[0];
@@ -57,7 +45,7 @@ export class FmpMarketDataProvider implements MarketDataProvider {
     const validation = validateTicker(ticker);
     if (!validation.ok) return validation;
 
-    const result = await this.fetchJson<FmpQuoteResponse[]>(`/quote/${ticker}`);
+    const result = await this.fetchJson<FmpQuoteResponse[]>("/quote", { symbol: ticker });
     if (!result.ok) return result;
 
     const row = result.data[0];
@@ -72,7 +60,7 @@ export class FmpMarketDataProvider implements MarketDataProvider {
       ticker: ticker.toUpperCase(),
       price: row.price,
       change: row.change ?? 0,
-      changePercent: row.changesPercentage ?? 0,
+      changePercent: row.changePercentage ?? row.changesPercentage ?? 0,
       dayHigh: row.dayHigh ?? row.price,
       dayLow: row.dayLow ?? row.price,
       previousClose: row.previousClose ?? row.price,
@@ -91,28 +79,20 @@ export class FmpMarketDataProvider implements MarketDataProvider {
     const validation = validateTicker(ticker);
     if (!validation.ok) return validation;
 
-    const fromStr = toDateStr(from);
-    const toStr = toDateStr(to);
-
-    const result = await this.fetchJson<FmpHistoricalResponse>(
-      `/historical-price-full/${ticker}`,
-      { from: fromStr, to: toStr }
+    const result = await this.fetchJson<FmpHistoricalRow[] | { symbol: string }>(
+      "/historical-price-eod/full",
+      { symbol: ticker, from: toDateStr(from), to: toDateStr(to) }
     );
     if (!result.ok) return result;
 
-    const rows = result.data.historical ?? [];
-    if (rows.length === 0 && !result.data.historical) {
-      // FMP returns {"Error Message": "..."} (still HTTP 200) for unknown
-      // tickers instead of an empty historical array — treat that as an
-      // invalid ticker rather than silently returning no data.
+    if (!Array.isArray(result.data) || result.data.length === 0) {
       return {
         ok: false,
         error: { code: "INVALID_TICKER", message: `No historical data found for ticker "${ticker}".` },
       };
     }
 
-    // FMP returns most-recent-first; the app's convention is oldest-first.
-    const bars: PriceBar[] = rows
+    const bars: PriceBar[] = result.data
       .map((r) => ({
         timestamp: new Date(r.date).toISOString(),
         open: r.open,
@@ -166,9 +146,7 @@ export class FmpMarketDataProvider implements MarketDataProvider {
 
       const json = (await res.json()) as unknown;
 
-      // FMP signals some errors (bad ticker, bad param) with HTTP 200 and a
-      // body like {"Error Message": "..."}
-      if (json && typeof json === "object" && "Error Message" in json) {
+      if (json && typeof json === "object" && !Array.isArray(json) && "Error Message" in json) {
         return {
           ok: false,
           error: {
@@ -216,6 +194,7 @@ interface FmpQuoteResponse {
   name?: string;
   price?: number;
   change?: number;
+  changePercentage?: number;
   changesPercentage?: number;
   dayHigh?: number;
   dayLow?: number;
@@ -227,14 +206,12 @@ interface FmpQuoteResponse {
   yearLow?: number;
 }
 
-interface FmpHistoricalResponse {
+interface FmpHistoricalRow {
   symbol?: string;
-  historical?: {
-    date: string; // "YYYY-MM-DD"
-    open: number;
-    high: number;
-    low: number;
-    close: number;
-    volume: number;
-  }[];
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
 }
