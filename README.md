@@ -120,6 +120,58 @@ enough to keep a personal project off search engines and away from casual
 visitors, not a substitute for real auth if this app ever holds
 multi-user or sensitive data.
 
+## Fundamental Financial Data
+
+The financial-statement data layer, at `src/server/fundamentals`. Retrieves
+real income statement, balance sheet, and cash flow statement data (income
+statement: revenue, gross profit, operating income, net income, EPS;
+balance sheet: cash, total assets, total liabilities, debt, shareholders'
+equity; cash flow: operating cash flow, capex, free cash flow), stores
+history so trends can be tracked, and turns it into everyday-language
+summaries — without any AI involved. (The Fundamental Analyst agent that
+will eventually interpret this data is a separate, later step.)
+
+**Architecture** mirrors `market-data` exactly on purpose:
+`FundamentalsProvider` interface → mock/FMP implementations → factory →
+`service.ts` (the only file allowed to call the provider or touch the DB)
+→ a restricted public barrel. Set `FUNDAMENTALS_DATA_PROVIDER=fmp` in
+`.env` to use real data (reuses the same `FMP_API_KEY` as market data —
+no new key needed); the default `mock` generates internally-consistent
+fake financials with no key required.
+
+**Provenance:** every stored period carries `source`, `filingDate`,
+`reportingPeriodEnd`, `fiscalYear`, `fiscalQuarter`, and `retrievedAt`.
+Annual and quarterly periods are never mixed — `periodType` is part of
+the database's uniqueness constraint and every query.
+
+**Validation** (`validate.ts`) runs deterministic sanity checks on every
+period — does the balance sheet actually balance, does free cash flow
+roughly equal operating cash flow minus capex, is gross profit ≤ revenue,
+is the reporting date plausible — and flags issues without ever
+discarding data. See `FundamentalsResult.periods[].warnings`.
+
+**Normalization for comparability** (`ratios.ts`): gross/operating/net
+margin and debt-to-equity, computed as plain percentages/ratios so two
+companies of very different size are directly comparable — pure
+arithmetic, never AI-derived.
+
+**Plain-English explanations** (`explain.ts`): rule-based, NOT
+AI-generated — "Revenue has grown steadily (+15% over this period).
+Since more revenue generally means the business is doing better, this is
+generally a good sign." Precision is preserved in `values` (the raw
+numbers); only `explanation` is simplified. Debt is treated as
+ambiguous ("isn't automatically bad") rather than automatically negative,
+matching the "more debt ≠ automatically bad" instruction this layer was
+built to follow.
+
+**UI:** the `FundamentalsPanel` component shows trend summaries
+("$100B → $115B → $130B" plus a one-line explanation) rather than raw
+statement tables, with an Annual/Quarterly toggle. It's on-demand (a
+button), not automatic, to conserve the FMP free-tier request budget —
+each load fetches three statements at once but is cached 24h afterward.
+
+Try it: `GET /api/fundamentals/AAPL?period=annual`.
+
 ## Technical Analysis Agent
 
 The first real AI agent in the app, at `src/server/agents/technical-analysis`.
@@ -173,10 +225,13 @@ npm run test:watch
 Covers the cache freshness/period-range logic (pure functions), the FMP
 provider's response parsing and error mapping (mocked `fetch`), the
 service layer's cache-hit/cache-miss/error-propagation behavior (mocked
-Prisma + provider), every technical indicator formula, and the Technical
+Prisma + provider), every technical indicator formula, the Technical
 Analysis Agent's calculation/interpretation/error-handling behavior
-(mocked market-data service + Anthropic API). These are unit tests — a
-good next step is integration tests against a real test database.
+(mocked market-data service + Anthropic API), and the fundamentals
+layer's validation rules, ratio math, plain-English explanation
+generation, FMP statement parsing, and service orchestration. These are
+unit tests — a good next step is integration tests against a real test
+database.
 
 **Note on schema changes:** the build command uses `prisma db push
 --accept-data-loss`. This is appropriate here because `PriceBar`/`Quote`

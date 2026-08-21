@@ -23,6 +23,13 @@ const envSchema = z.object({
   // src/server/market-data/fmp-provider.ts for why it was chosen.
   MARKET_DATA_PROVIDER: z.enum(["mock", "fmp", "alpha_vantage", "finnhub"]).default("mock"),
   FMP_API_KEY: z.string().optional(),
+
+  // Fundamentals (income statement / balance sheet / cash flow) provider
+  // selection. Separate from MARKET_DATA_PROVIDER on purpose — they're
+  // different data domains that happen to both be servable by FMP today,
+  // but keeping the switches independent means either can move to a
+  // different vendor later without touching the other.
+  FUNDAMENTALS_DATA_PROVIDER: z.enum(["mock", "fmp"]).default("mock"),
   ALPHA_VANTAGE_API_KEY: z.string().optional(),
   FINNHUB_API_KEY: z.string().optional(),
 

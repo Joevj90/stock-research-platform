@@ -8,6 +8,8 @@ const log = logger.child("agents:technical-analysis:interpreter");
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
+// Balanced default model for a moderate-complexity structured-interpretation
+// task — see the chat writeup for why this model was chosen.
 const MODEL = "claude-sonnet-5";
 const FETCH_TIMEOUT_MS = 30_000;
 
@@ -38,6 +40,12 @@ const InterpretationSchema = z.object({
   explanation: z.string().min(1),
 });
 
+/**
+ * Sends the already-calculated metrics to Claude for interpretation only.
+ * Returns a typed error (never throws, never silently fabricates a
+ * fallback interpretation) if the API key is missing, the request fails,
+ * or the model's response doesn't match the required schema.
+ */
 export async function interpretTechnicalMetrics(
   metrics: CalculatedTechnicalMetrics
 ): Promise<Result<TechnicalInterpretation>> {

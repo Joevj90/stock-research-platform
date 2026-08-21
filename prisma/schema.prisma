@@ -30,6 +30,7 @@ model Stock {
   quotes       Quote[]
   cacheEntries MarketDataCacheEntry[]
   financials   Financials[]
+  fundamentalsCacheEntries FundamentalsCacheEntry[]
   filings      Filing[]
   newsItems    NewsItem[]
   analyses     Analysis[]
@@ -112,26 +113,69 @@ model MarketDataCacheEntry {
   @@map("market_data_cache_entries")
 }
 
-/// A reported financial statement period (income/balance/cashflow summary).
-/// Populated in a later phase (fundamentals retrieval).
+/// A reported financial statement period (income statement + balance
+/// sheet + cash flow statement, merged into one row per reporting
+/// period). Populated by the fundamentals data layer (Step 5).
+/// Every row carries full provenance: source, filingDate, fiscalYear,
+/// fiscalQuarter, and retrievedAt — never an unattributed data point.
 model Financials {
-  id            String   @id @default(cuid())
-  stockId       String
-  stock         Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
-  periodEnd     DateTime
-  periodType    String // "annual" | "quarterly"
-  revenue       Float?
-  netIncome     Float?
-  eps           Float?
-  totalAssets   Float?
-  totalLiab     Float?
-  freeCashFlow  Float?
-  raw           String? // JSON blob for fields not yet normalized into columns
+  id          String   @id @default(cuid())
+  stockId     String
+  stock       Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+
+  // --- Metadata / provenance ---
+  periodEnd     DateTime // the reporting period's end date
+  periodType    String   // "annual" | "quarterly" — never mixed in one query
+  fiscalYear    Int
+  fiscalQuarter Int?     // null for annual periods
+  filingDate    DateTime?
+  reportedCurrency String?
   provider      String
-  createdAt     DateTime @default(now())
+  retrievedAt   DateTime @default(now())
+
+  // --- Income statement ---
+  revenue         Float?
+  grossProfit     Float?
+  operatingIncome Float?
+  netIncome       Float?
+  eps             Float?
+
+  // --- Balance sheet ---
+  cash               Float?
+  totalAssets        Float?
+  totalLiabilities   Float?
+  totalDebt          Float?
+  shareholdersEquity Float?
+
+  // --- Cash flow statement ---
+  operatingCashFlow   Float?
+  capitalExpenditures Float?
+  freeCashFlow        Float?
+
+  // Deterministic validation findings for this period (see
+  // src/server/fundamentals/validate.ts), stored as a JSON array so the
+  // UI can surface data-quality flags without re-running validation.
+  validationWarnings String? // JSON-encoded ValidationWarning[]
 
   @@unique([stockId, periodEnd, periodType])
+  @@index([stockId, periodType, fiscalYear])
   @@map("financials")
+}
+
+/// Cache index for fundamentals fetches — mirrors MarketDataCacheEntry.
+/// One row per (stock, periodType): fundamentals are fetched as a whole
+/// history in one call, so caching is scoped at that granularity rather
+/// than per individual period.
+model FundamentalsCacheEntry {
+  id          String   @id @default(cuid())
+  stockId     String
+  stock       Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  periodType  String   // "annual" | "quarterly"
+  provider    String
+  retrievedAt DateTime @default(now())
+
+  @@unique([stockId, periodType])
+  @@map("fundamentals_cache_entries")
 }
 
 /// SEC filing metadata (10-K, 10-Q, 8-K, etc). Populated in a later phase.
