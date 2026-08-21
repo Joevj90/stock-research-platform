@@ -104,6 +104,21 @@ export class MockMarketDataProvider implements MarketDataProvider {
     log.debug("generated mock history", { ticker, from, to, bars: bars.length });
     return { ok: true, data: bars };
   }
+
+  async getPeerSymbols(ticker: string, limit: number): Promise<Result<string[]>> {
+    const validation = validateTicker(ticker);
+    if (!validation.ok) return validation;
+
+    // Deterministic mock peer pool -- clearly NOT real competitors, just a
+    // fixed set of well-known real ticker strings so the UI/downstream
+    // code can be exercised without a real API key. Never includes the
+    // ticker itself.
+    const pool = ["MSFT", "AAPL", "GOOGL", "AMZN", "META", "NVDA", "AMD", "INTC", "CSCO", "ORCL"];
+    const peers = pool.filter((p) => p !== ticker.toUpperCase()).slice(0, limit);
+
+    log.debug("generated mock peer symbols", { ticker, peers });
+    return { ok: true, data: peers };
+  }
 }
 
 function validateTicker(ticker: string): Result<true> {

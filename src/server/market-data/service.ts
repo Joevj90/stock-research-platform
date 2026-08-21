@@ -205,6 +205,18 @@ export async function getHistoricalPrices(
 
 /** Convenience composite used by the dashboard: quote + history + company
  * name + provenance in one call. */
+/** Returns up to `limit` real peer/competitor ticker symbols for a
+ * company (same sector/exchange/market-cap range, per the provider).
+ * Not cached/persisted — this is a lightweight lookup, not a data point
+ * with historical trend value like quotes or price history. */
+export async function getPeerSymbols(rawTicker: string, limit = 5): Promise<Result<string[]>> {
+  const ticker = rawTicker.trim().toUpperCase();
+  if (!ticker) {
+    return { ok: false, error: { code: "MISSING_TICKER", message: "Ticker symbol is required." } };
+  }
+  return marketDataProvider.getPeerSymbols(ticker, limit);
+}
+
 export async function getStockSnapshot(
   rawTicker: string,
   period: HistoricalPeriod = "6M"

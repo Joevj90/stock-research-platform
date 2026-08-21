@@ -23,4 +23,10 @@ export interface MarketDataProvider {
    * deal in dates, never in the app's period vocabulary, so a provider
    * swap never has to know what "1Y" means. */
   getHistory(ticker: string, from: Date, to: Date): Promise<Result<PriceBar[]>>;
+
+  /** Up to `limit` peer/competitor ticker symbols for comparison purposes
+   * (same sector/exchange/market-cap range, as defined by the provider).
+   * Added for the Valuation Engine's peer comparison — returns real
+   * tickers only, never invented ones. */
+  getPeerSymbols(ticker: string, limit: number): Promise<Result<string[]>>;
 }

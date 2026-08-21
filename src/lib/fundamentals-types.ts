@@ -48,6 +48,12 @@ export interface FinancialPeriod {
   operatingCashFlow: number | null;
   capitalExpenditures: number | null;
   freeCashFlow: number | null;
+
+  // Added in Step 8 (Valuation Engine) — additive fields needed for
+  // EV/EBITDA and dividend yield. Sourced the same way as every other
+  // field here: real provider data, never estimated.
+  ebitda: number | null;
+  dividendsPaid: number | null; // typically reported as a negative cash outflow
 }
 
 /** A single deterministic validation finding about a FinancialPeriod —

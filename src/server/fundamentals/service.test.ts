@@ -48,6 +48,8 @@ function samplePeriod(fiscalYear: number, revenue: number): FinancialPeriod {
     operatingCashFlow: revenue * 0.22,
     capitalExpenditures: -revenue * 0.05,
     freeCashFlow: revenue * 0.17,
+    ebitda: revenue * 0.3,
+    dividendsPaid: -revenue * 0.02,
   };
 }
 

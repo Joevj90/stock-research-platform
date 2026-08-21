@@ -173,6 +173,8 @@ function financialPeriodToRow(p: FinancialPeriod, warnings: { code: string; mess
     operatingCashFlow: p.operatingCashFlow,
     capitalExpenditures: p.capitalExpenditures,
     freeCashFlow: p.freeCashFlow,
+    ebitda: p.ebitda,
+    dividendsPaid: p.dividendsPaid,
     validationWarnings: JSON.stringify(warnings),
   };
 }
@@ -199,6 +201,8 @@ interface FinancialsRow {
   operatingCashFlow: number | null;
   capitalExpenditures: number | null;
   freeCashFlow: number | null;
+  ebitda: number | null;
+  dividendsPaid: number | null;
 }
 
 function rowToFinancialPeriod(row: FinancialsRow): FinancialPeriod {
@@ -225,5 +229,7 @@ function rowToFinancialPeriod(row: FinancialsRow): FinancialPeriod {
     operatingCashFlow: row.operatingCashFlow,
     capitalExpenditures: row.capitalExpenditures,
     freeCashFlow: row.freeCashFlow,
+    ebitda: row.ebitda,
+    dividendsPaid: row.dividendsPaid,
   };
 }

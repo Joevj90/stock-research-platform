@@ -26,6 +26,8 @@ function basePeriod(overrides: Partial<FinancialPeriod> = {}): FinancialPeriod {
     operatingCashFlow: 110_000_000_000,
     capitalExpenditures: -10_000_000_000,
     freeCashFlow: 100_000_000_000,
+    ebitda: 140_000_000_000,
+    dividendsPaid: -15_000_000_000,
     ...overrides,
   };
 }
@@ -121,6 +123,8 @@ describe("validateFinancialPeriod", () => {
       operatingCashFlow: null,
       capitalExpenditures: null,
       freeCashFlow: null,
+      ebitda: null,
+      dividendsPaid: null,
     });
     expect(validateFinancialPeriod(period)).toEqual([]);
   });

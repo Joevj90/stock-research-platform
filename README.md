@@ -220,6 +220,65 @@ with raw ratios up front.
 Try it: `GET /api/fundamental-analysis/AAPL?period=annual`, or "Run
 Analysis" under Fundamental Analyst on a stock's page.
 
+## Valuation Engine
+
+Estimates whether a stock looks cheap, reasonably priced, expensive, or
+very expensive, at `src/server/agents/valuation-engine`. Built entirely
+on real data already fetched by earlier steps — no new data domain, no
+duplicate systems.
+
+**Integration, not duplication:** calls only `getQuote`,
+`getHistoricalPrices` from `@/server/market-data` and `getFundamentals`
+from `@/server/fundamentals` — the same public barrels every other agent
+uses. The one small addition was `getPeerSymbols` on the market-data
+provider interface (real FMP peer-company data), added the same way
+`getQuote`/`getHistory` already exist there.
+
+**FACT / CALCULATION / ASSUMPTION / FORECAST / AI INTERPRETATION**,
+concretely:
+- **FACT** — current price, market cap, reported financials (Steps 1 & 5),
+  never restated here.
+- **CALCULATION** — `ValuationMetrics` (P/E, PEG, EV/EBITDA, EV/Revenue,
+  P/S, P/B, FCF yield, dividend yield — each explicitly null with a
+  stated reason when not meaningful, e.g. negative earnings),
+  `HistoricalComparison` (today's multiples vs. the company's own past,
+  computed from existing price + fundamentals history), `PeerComparison`
+  (real peer tickers' multiples, averaged), and the `SensitivityRow`s —
+  all deterministic, zero AI.
+- **ASSUMPTION** — `DcfAssumptions`: explicit, labeled, never presented
+  as fact. The base case is anchored on the company's own recent
+  growth/margin rather than arbitrary numbers; bear/bull are
+  systematically more conservative/optimistic from there — "Do not
+  choose assumptions simply to justify the current stock price."
+- **FORECAST** — each DCF scenario's fair value per share: a model
+  output under stated assumptions, explicitly not a prediction.
+- **AI INTERPRETATION** — the CHEAP/REASONABLY_PRICED/EXPENSIVE/
+  VERY_EXPENSIVE rating, plain-language explanation, biggest-uncertainty
+  callout, and per-assumption explanations — tagged `source: "ai"`,
+  never computing a number itself.
+
+**DCF math is 100% deterministic backend code** (`dcf.ts`) — bear/base/
+bull scenarios, Gordon Growth terminal value, net-debt adjustment, and a
+4-dimension sensitivity grid (revenue growth, margin, discount rate,
+terminal growth), all pure functions with directional sanity tests
+(e.g. confirmed: lower discount rate → higher fair value, more debt →
+lower equity value). The AI interpreter never touches this math — it
+only reads the finished numbers.
+
+**Peer comparison is not the Competitor Agent** (that's still a later,
+deferred step) — this only pulls real peer tickers' current valuation
+multiples via infrastructure that already exists and averages them
+numerically, the way a quick comps table would, with no qualitative
+competitive narrative.
+
+**UI:** current price and rating lead, followed by the plain-language
+explanation and biggest uncertainty, then metrics, historical/peer
+comparison, DCF range with bear/base/bull cards, assumption explanations,
+and sensitivity analysis behind a toggle — all 10 required sections, most
+important first.
+
+Try it: `GET /api/valuation/AAPL`.
+
 ## Fundamental Financial Data
 
 The financial-statement data layer, at `src/server/fundamentals`. Retrieves
@@ -331,9 +390,12 @@ Analysis Agent's calculation/interpretation/error-handling behavior
 validation rules, ratio math, plain-English explanation generation, FMP
 statement parsing, and service orchestration, the Fundamental Analyst's
 growth/ROE/ROIC/earnings-quality calculations and AI schema validation,
-and the News Intelligence agent's FMP news parsing, service
-orchestration, and — notably — its anti-hallucination URL-verification
-guardrail (178 tests total). These are unit tests — a good next step is
+the News Intelligence agent's FMP news parsing, service orchestration,
+and — notably — its anti-hallucination URL-verification guardrail, and
+the Valuation Engine's ratio math, historical/peer comparison, and —
+notably — 19 tests on the DCF engine alone (including directional sanity
+checks like "lower discount rate must produce a higher fair value")
+(234 tests total). These are unit tests — a good next step is
 integration tests against a real test database.
 
 **Note on schema changes:** the build command uses `prisma db push

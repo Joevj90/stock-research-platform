@@ -54,6 +54,9 @@ export class MockFundamentalsProvider implements FundamentalsProvider {
       const operatingCashFlow = netIncome * (1.1 + rng() * 0.3);
       const capitalExpenditures = -(revenue * (0.03 + rng() * 0.07));
       const freeCashFlow = operatingCashFlow + capitalExpenditures;
+      const ebitda = operatingIncome * (1.15 + rng() * 0.1); // approx. operating income + D&A
+      const paysDividend = rng() > 0.4;
+      const dividendsPaid = paysDividend ? -(netIncome * (0.15 + rng() * 0.25)) : 0;
 
       const periodEnd = new Date(now);
       if (periodType === "annual") {
@@ -90,6 +93,8 @@ export class MockFundamentalsProvider implements FundamentalsProvider {
         operatingCashFlow: round2(operatingCashFlow),
         capitalExpenditures: round2(capitalExpenditures),
         freeCashFlow: round2(freeCashFlow),
+        ebitda: round2(ebitda),
+        dividendsPaid: round2(dividendsPaid),
       });
     }
 

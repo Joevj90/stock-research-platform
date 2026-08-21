@@ -26,6 +26,8 @@ function period(fiscalYear: number, overrides: Partial<FinancialPeriod> = {}): F
     operatingCashFlow: null,
     capitalExpenditures: null,
     freeCashFlow: null,
+    ebitda: null,
+    dividendsPaid: null,
     ...overrides,
   };
 }

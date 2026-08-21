@@ -102,6 +102,10 @@ export class FmpFundamentalsProvider implements FundamentalsProvider {
         operatingCashFlow: cashFlow?.operatingCashFlow ?? null,
         capitalExpenditures: capex,
         freeCashFlow: cashFlow?.freeCashFlow ?? null,
+
+        // Step 8 additions
+        ebitda: income.ebitda ?? null,
+        dividendsPaid: cashFlow?.dividendsPaid ?? null,
       };
     });
 
@@ -200,6 +204,7 @@ interface FmpIncomeStatementRow {
   operatingIncome?: number;
   netIncome?: number;
   eps?: number;
+  ebitda?: number;
 }
 
 interface FmpBalanceSheetRow {
@@ -216,4 +221,5 @@ interface FmpCashFlowRow {
   operatingCashFlow?: number;
   capitalExpenditure?: number;
   freeCashFlow?: number;
+  dividendsPaid?: number;
 }

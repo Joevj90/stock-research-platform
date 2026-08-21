@@ -127,6 +127,22 @@ export class FmpMarketDataProvider implements MarketDataProvider {
     return { ok: true, data: bars };
   }
 
+  async getPeerSymbols(ticker: string, limit: number): Promise<Result<string[]>> {
+    const validation = validateTicker(ticker);
+    if (!validation.ok) return validation;
+
+    // FMP's stable Peer Comparison endpoint (confirmed path via FMP's own
+    // docs; response shape handled defensively below since the exact
+    // stable-API field names weren't confirmable from documentation alone
+    // — this parses either a flat array of peer objects or the legacy
+    // {symbol, peersList: [...]} wrapper shape without assuming one).
+    const result = await this.fetchJson<unknown>("/peers", { symbol: ticker });
+    if (!result.ok) return result;
+
+    const symbols = extractPeerSymbols(result.data, ticker);
+    return { ok: true, data: symbols.slice(0, limit) };
+  }
+
   private async fetchJson<T>(
     path: string,
     extraParams: Record<string, string> = {}
@@ -148,6 +164,18 @@ export class FmpMarketDataProvider implements MarketDataProvider {
         return {
           ok: false,
           error: { code: "PROVIDER_AUTH_ERROR", message: "Market data provider rejected the API key." },
+        };
+      }
+      if (res.status === 402) {
+        log.warn("FMP plan does not include this endpoint", { status: res.status, path });
+        return {
+          ok: false,
+          error: {
+            code: "PROVIDER_PLAN_REQUIRED",
+            message:
+              "This data requires a paid FMP plan (the free Basic plan only covers prices and quotes). " +
+              "Upgrade at financialmodelingprep.com/pricing-plans to use this feature.",
+          },
         };
       }
       if (res.status === 429) {
@@ -239,4 +267,34 @@ interface FmpHistoricalRow {
   low: number;
   close: number;
   volume: number;
+}
+
+/**
+ * Defensively extracts peer ticker symbols from FMP's peers response,
+ * without assuming one specific shape -- handles a flat array of
+ * `{symbol: string, ...}` objects (the modern shape), the legacy
+ * `[{symbol, peersList: string[]}]` wrapper, or a bare array of strings.
+ * Always excludes the ticker itself and any non-string/empty entries, so
+ * a shape this function doesn't recognize degrades to an empty list
+ * rather than a wrong one.
+ */
+function extractPeerSymbols(data: unknown, ticker: string): string[] {
+  const self = ticker.toUpperCase();
+  const out: string[] = [];
+
+  if (Array.isArray(data)) {
+    for (const item of data) {
+      if (typeof item === "string") {
+        out.push(item);
+      } else if (item && typeof item === "object") {
+        if (Array.isArray((item as { peersList?: unknown }).peersList)) {
+          out.push(...((item as { peersList: unknown[] }).peersList.filter((s): s is string => typeof s === "string")));
+        } else if (typeof (item as { symbol?: unknown }).symbol === "string") {
+          out.push((item as { symbol: string }).symbol);
+        }
+      }
+    }
+  }
+
+  return Array.from(new Set(out.map((s) => s.toUpperCase()))).filter((s) => s !== self);
 }

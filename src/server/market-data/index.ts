@@ -6,5 +6,5 @@
  * "UI → Backend → Market Data Service → Provider" an enforced shape rather
  * than just a diagram.
  */
-export { getQuote, getHistoricalPrices, getStockSnapshot } from "./service";
+export { getQuote, getHistoricalPrices, getStockSnapshot, getPeerSymbols } from "./service";
 export type { MarketDataProvider } from "./provider.interface";

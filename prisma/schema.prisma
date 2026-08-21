@@ -153,6 +153,10 @@ model Financials {
   capitalExpenditures Float?
   freeCashFlow        Float?
 
+  // --- Step 8 additions (Valuation Engine) ---
+  ebitda              Float?
+  dividendsPaid       Float?
+
   // Deterministic validation findings for this period (see
   // src/server/fundamentals/validate.ts), stored as a JSON array so the
   // UI can surface data-quality flags without re-running validation.
