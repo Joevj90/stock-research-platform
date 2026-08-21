@@ -8,19 +8,6 @@ const log = logger.child("fundamentals:fmp");
 const FMP_BASE_URL = "https://financialmodelingprep.com/stable";
 const FETCH_TIMEOUT_MS = 15_000;
 
-/**
- * Financial Modeling Prep fundamentals provider -- the real,
- * non-mock source for income statement, balance sheet, and cash flow
- * statement data. FMP standardizes these from SEC filings (10-K/10-Q)
- * and returns filing date + fiscal year/period alongside each period,
- * which is what lets this app attach real provenance to every figure.
- *
- * This class's only job is fetching FMP's three statement endpoints and
- * merging them (by fiscalYear + period) into this app's normalized
- * FinancialPeriod shape. It performs no validation, no caching, and no
- * DB writes -- that's service.ts, same separation of concerns as the
- * market-data module.
- */
 export class FmpFundamentalsProvider implements FundamentalsProvider {
   readonly id = "fmp" as const;
   readonly isMock = false;
@@ -65,9 +52,6 @@ export class FmpFundamentalsProvider implements FundamentalsProvider {
       };
     }
 
-    // Merge the three statements by reporting date -- FMP returns all
-    // three keyed the same way (date/fiscalYear/period), so a plain date
-    // match is reliable.
     const balanceByDate = new Map(balanceResult.data.map((r) => [r.date, r]));
     const cashFlowByDate = new Map(cashFlowResult.data.map((r) => [r.date, r]));
 
@@ -128,6 +112,18 @@ export class FmpFundamentalsProvider implements FundamentalsProvider {
           error: { code: "PROVIDER_AUTH_ERROR", message: "Market data provider rejected the API key." },
         };
       }
+      if (res.status === 402) {
+        log.warn("FMP plan does not include this endpoint", { status: res.status, path });
+        return {
+          ok: false,
+          error: {
+            code: "PROVIDER_PLAN_REQUIRED",
+            message:
+              "Financial statement data requires a paid FMP plan (the free Basic plan only covers " +
+              "prices and quotes). Upgrade at financialmodelingprep.com/pricing-plans to use this feature.",
+          },
+        };
+      }
       if (res.status === 429) {
         return {
           ok: false,
@@ -170,7 +166,6 @@ export class FmpFundamentalsProvider implements FundamentalsProvider {
   }
 }
 
-/** FMP's `period` field looks like "Q1"/"Q2"/"Q3"/"Q4" for quarterly rows. */
 function parseFiscalQuarter(period: string | undefined): number | null {
   if (!period) return null;
   const match = period.match(/Q([1-4])/i);
