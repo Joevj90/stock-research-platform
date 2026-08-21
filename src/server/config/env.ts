@@ -38,6 +38,9 @@ const envSchema = z.object({
 
   // Macro/economic indicator provider selection, reuses FMP_API_KEY.
   MACRO_DATA_PROVIDER: z.enum(["mock", "fmp"]).default("mock"),
+
+  // Insider trading provider selection, reuses FMP_API_KEY.
+  INSIDER_TRADING_PROVIDER: z.enum(["mock", "fmp"]).default("mock"),
   ALPHA_VANTAGE_API_KEY: z.string().optional(),
   FINNHUB_API_KEY: z.string().optional(),
 

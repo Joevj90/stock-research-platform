@@ -220,6 +220,55 @@ with raw ratios up front.
 Try it: `GET /api/fundamental-analysis/AAPL?period=annual`, or "Run
 Analysis" under Fundamental Analyst on a stock's page.
 
+## Management Analysis
+
+Judges execution quality and trustworthiness of company leadership, at
+`src/server/agents/management-analysis`, built on a new
+`src/server/insider-trading` data domain.
+
+**A genuinely honest limitation, handled correctly instead of glossed
+over:** this app has no source of historical management guidance
+statements (e.g. "we expect revenue to grow 20%") or their outcomes, and
+no earnings-call transcripts. Rather than let the AI recall specific
+guidance figures from its training data — which this app could never
+attach a verified source or date to — `trackRecordVsGuidance` is
+structurally forced to state that comparison is unavailable. This is
+enforced two ways: the system prompt makes it a hard rule with "no
+exceptions", and a dedicated test confirms the field's content states
+unavailability rather than a specific figure.
+
+**A genuinely new, correctly-integrated data domain:** insider trading
+(SEC Form 4 filings) is company-specific and changes periodically, so it
+follows the exact same provider/service/cache/Prisma pattern as
+`market-data`, `fundamentals`, and `news` — real transactions via FMP's
+Search Insider Trades endpoint, each retaining its real SEC filing URL,
+transaction date, and filing date.
+
+**Real capital-allocation evidence, no new data source needed:**
+dividend, debt, cash, free-cash-flow, and an implied-share-count trend
+(a defensible buyback signal derived from real net income ÷ EPS across
+periods) are all computed deterministically from Step 5's existing
+financial-statement history — see `capital-allocation.ts`.
+
+**Insider selling is never automatically bearish:** the system prompt
+explicitly forbids framing a sale as a negative signal by default,
+consistent with the many legitimate reasons executives sell shares.
+
+**FACT / CALCULATION / AI INTERPRETATION / CONCLUSION:** real insider
+transactions and financial-statement figures are FACT; capital-allocation
+trends and the insider-activity summary are CALCULATION
+(`source: "calculated"`); the score, assessment, and explanations are AI
+INTERPRETATION (`source: "ai"`); `overallConclusion` is the CONCLUSION,
+never presented as settled fact.
+
+**UI:** score and STRONG/GOOD/NEUTRAL/CONCERNING/VERY_CONCERNING lead,
+then what's going well / concerns, the (honestly unavailable) guidance
+track record, capital-allocation trend cells, insider activity, and a
+HIGH/MEDIUM/LOW/INSUFFICIENT_DATA credibility rating — matching the
+spec's required section order.
+
+Try it: `GET /api/management/AAPL`.
+
 ## Competitor Analysis
 
 Determines whether a company is winning or losing against its real
@@ -550,8 +599,12 @@ schema validation, the Macro Analysis agent's real-indicator provenance,
 in-memory cache behavior, and company-specific relevance enforcement, and
 the Competitor Analysis agent's real-data metric calculations,
 competitor-relevance schema validation, and graceful degradation when
-peer identification fails (303 tests total). These are unit tests — a
-good next step is integration tests against a real test database.
+peer identification fails, and the Management Analysis agent's
+deterministic capital-allocation math, insider-transaction parsing and
+aggregation, and — notably — a dedicated test confirming the AI cannot
+fabricate a historical guidance figure (343 tests total). These are unit
+tests — a good next step is integration tests against a real test
+database.
 
 **Note on schema changes:** the build command uses `prisma db push
 --accept-data-loss`. This is appropriate here because `PriceBar`/`Quote`

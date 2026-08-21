@@ -34,6 +34,8 @@ model Stock {
   filings      Filing[]
   newsItems    NewsItem[]
   newsCacheEntries NewsCacheEntry[]
+  insiderTransactions InsiderTransaction[]
+  insiderTradingCacheEntries InsiderTradingCacheEntry[]
   analyses     Analysis[]
   forecasts    Forecast[]
 
@@ -238,6 +240,43 @@ model NewsCacheEntry {
 
   @@unique([stockId])
   @@map("news_cache_entries")
+}
+
+/// A single real insider-trading transaction (SEC Form 4 disclosure),
+/// used by the Management Analysis agent (Step 12). Every field is
+/// exactly what a provider returned — never AI-modified. `url` links to
+/// the real SEC filing where available, satisfying "preserve source URLs
+/// and dates" and "never fabricate ... transactions".
+model InsiderTransaction {
+  id                String   @id @default(cuid())
+  stockId           String
+  stock             Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  reportingName     String // the insider's name, as reported
+  role              String? // e.g. "officer: CFO", "director"
+  transactionType   String // e.g. "purchase", "sale", "other" (normalized from raw filing codes)
+  transactionDate   DateTime
+  filingDate        DateTime
+  shares            Float
+  pricePerShare     Float?
+  url               String? // link to the real SEC filing
+  provider          String
+  retrievedAt       DateTime @default(now())
+
+  @@unique([stockId, reportingName, transactionDate, shares, transactionType])
+  @@index([stockId, transactionDate])
+  @@map("insider_transactions")
+}
+
+/// Cache index for insider-trading fetches — mirrors NewsCacheEntry.
+model InsiderTradingCacheEntry {
+  id          String   @id @default(cuid())
+  stockId     String
+  stock       Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  provider    String
+  retrievedAt DateTime @default(now())
+
+  @@unique([stockId])
+  @@map("insider_trading_cache_entries")
 }
 
 /// Output of an AI analysis pass (single analyst, committee verdict, devil's
