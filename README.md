@@ -120,6 +120,53 @@ enough to keep a personal project off search engines and away from casual
 visitors, not a substitute for real auth if this app ever holds
 multi-user or sensitive data.
 
+## News Intelligence
+
+Finds, groups, and explains recent news about a company, at
+`src/server/agents/news-intelligence` (built on top of a new `src/server/
+news` module — mirroring the same pattern as market-data/fundamentals).
+
+**Integration, not duplication:** the agent calls `getCompanyNews` from
+`@/server/news` — never a provider directly, never the database directly.
+`src/server/news` reuses FMP (`GET /stable/news/stock?symbols=TICKER`,
+confirmed against FMP's own docs) and extends the `NewsItem`/adds a
+`NewsCacheEntry` model that Phase 1 had already reserved — no duplicate
+schema.
+
+**Structural anti-hallucination guardrail — this is the key design
+decision of this step:** the AI is given the real fetched articles and
+told to group duplicate coverage and pick the 3–7 most important events,
+but every returned event's `primaryArticleUrl` (and each
+`relatedArticleUrls` entry) is checked against the actual fetched article
+URLs after parsing. An event referencing a URL that wasn't really
+retrieved is silently dropped — see `interpreter.ts`'s verification step
+and its dedicated test. This isn't just a prompt instruction; it's
+enforced in code, the same way the Technical Analysis Agent enforces
+"never ask the LLM to calculate" by never handing it raw prices to
+compute from.
+
+**FACT / AI INTERPRETATION / POSSIBLE IMPACT:** `NewsArticle` (the FACT
+layer) is exactly what a provider returned, never touched by AI.
+`whatHappened`/`whyItMatters` are the AI's interpretation.
+`possibleStockImpact` is explicitly framed as a possibility in the system
+prompt, never a certainty.
+
+**Deduplication:** the AI groups articles covering the same underlying
+event into one `NewsEvent` (primary + related URLs) rather than treating
+every article as a separate story, so coverage volume doesn't inflate
+perceived importance.
+
+**Plain language:** every jargon term (guidance, dilutive offering,
+regulatory headwinds, etc.) is explained inline, enforced by the system
+prompt.
+
+**UI:** a "What's Happening With TICKER?" 🟢🔴🟡 summary leads, then
+importance-sorted event cards (each linking to its real source, showing
+classification, importance, and time frame), on-demand via "Run
+Analysis" since it's a paid AI call.
+
+Try it: `GET /api/news/AAPL`.
+
 ## Fundamental Analyst AI
 
 The first agent to interpret Step 5's financial data, at
@@ -282,11 +329,12 @@ Prisma + provider), every technical indicator formula, the Technical
 Analysis Agent's calculation/interpretation/error-handling behavior
 (mocked market-data service + Anthropic API), the fundamentals layer's
 validation rules, ratio math, plain-English explanation generation, FMP
-statement parsing, and service orchestration, and the Fundamental
-Analyst's growth/ROE/ROIC/earnings-quality calculations, AI response
-schema validation, and no-fabrication enforcement (148 tests total).
-These are unit tests — a good next step is integration tests against a
-real test database.
+statement parsing, and service orchestration, the Fundamental Analyst's
+growth/ROE/ROIC/earnings-quality calculations and AI schema validation,
+and the News Intelligence agent's FMP news parsing, service
+orchestration, and — notably — its anti-hallucination URL-verification
+guardrail (178 tests total). These are unit tests — a good next step is
+integration tests against a real test database.
 
 **Note on schema changes:** the build command uses `prisma db push
 --accept-data-loss`. This is appropriate here because `PriceBar`/`Quote`

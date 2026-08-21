@@ -30,6 +30,11 @@ const envSchema = z.object({
   // but keeping the switches independent means either can move to a
   // different vendor later without touching the other.
   FUNDAMENTALS_DATA_PROVIDER: z.enum(["mock", "fmp"]).default("mock"),
+
+  // News provider selection, reuses FMP_API_KEY (same as market data and
+  // fundamentals). Separate switch on purpose — see market-data/provider.ts
+  // and fundamentals/provider.ts for why these are kept independent.
+  NEWS_DATA_PROVIDER: z.enum(["mock", "fmp"]).default("mock"),
   ALPHA_VANTAGE_API_KEY: z.string().optional(),
   FINNHUB_API_KEY: z.string().optional(),
 

@@ -33,6 +33,7 @@ model Stock {
   fundamentalsCacheEntries FundamentalsCacheEntry[]
   filings      Filing[]
   newsItems    NewsItem[]
+  newsCacheEntries NewsCacheEntry[]
   analyses     Analysis[]
   forecasts    Forecast[]
 
@@ -195,6 +196,13 @@ model Filing {
 }
 
 /// A news item relevant to the company or its industry. Populated in a later phase.
+/// A retrieved news article for a company (real data only — see
+/// src/server/news for the provider that populates this). The AI's
+/// classification (bullish/bearish/neutral, importance, grouping) is
+/// computed on demand and NOT persisted here, same pattern as the
+/// Technical Analysis Agent and Fundamental Analyst — only the raw fetched
+/// facts are stored; every field below is exactly what a provider
+/// returned, never AI-modified.
 model NewsItem {
   id          String   @id @default(cuid())
   stockId     String
@@ -203,12 +211,29 @@ model NewsItem {
   url         String
   publishedAt DateTime
   sourceName  String
-  sentiment   Float? // -1..1, filled in by sentiment analysis phase
+  sourceType  String? // e.g. "press_release", "financial_news" — provider-classified where available
+  summary     String? // short snippet/description from the provider, if any
   provider    String
-  createdAt   DateTime @default(now())
+  retrievedAt DateTime @default(now())
 
+  @@unique([stockId, url])
   @@index([stockId, publishedAt])
   @@map("news_items")
+}
+
+/// Cache index for news fetches — mirrors MarketDataCacheEntry /
+/// FundamentalsCacheEntry. One row per stock: a news fetch retrieves a
+/// batch of recent articles in one call, so caching is scoped at that
+/// granularity.
+model NewsCacheEntry {
+  id          String   @id @default(cuid())
+  stockId     String
+  stock       Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  provider    String
+  retrievedAt DateTime @default(now())
+
+  @@unique([stockId])
+  @@map("news_cache_entries")
 }
 
 /// Output of an AI analysis pass (single analyst, committee verdict, devil's
