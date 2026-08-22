@@ -11,7 +11,7 @@ const ANTHROPIC_VERSION = "2023-06-01";
 // Balanced default model for a moderate-complexity structured-interpretation
 // task — see the chat writeup for why this model was chosen.
 const MODEL = "claude-sonnet-5";
-const FETCH_TIMEOUT_MS = 30_000;
+const FETCH_TIMEOUT_MS = 45_000; // raised from 30s for the same reason
 
 const SYSTEM_PROMPT = `You are the interpretation layer of a Technical Analysis Agent inside a stock research application.
 
