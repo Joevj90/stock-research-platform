@@ -13,6 +13,7 @@ import { SentimentPanel } from "@/components/SentimentPanel";
 import { MacroAnalysisPanel } from "@/components/MacroAnalysisPanel";
 import { CompetitorAnalysisPanel } from "@/components/CompetitorAnalysisPanel";
 import { ManagementAnalysisPanel } from "@/components/ManagementAnalysisPanel";
+import { RiskAnalystPanel } from "@/components/RiskAnalystPanel";
 import { HISTORICAL_PERIODS, type HistoricalPeriod, type StockSnapshot } from "@/lib/types";
 
 const COMING_SOON_SECTIONS = [
@@ -132,6 +133,8 @@ function DashboardContent({ snapshot }: { snapshot: StockSnapshot }) {
       <CompetitorAnalysisPanel ticker={ticker} />
 
       <ManagementAnalysisPanel ticker={ticker} />
+
+      <RiskAnalystPanel ticker={ticker} />
 
       <section>
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-gray-500">

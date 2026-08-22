@@ -220,6 +220,55 @@ with raw ratios up front.
 Try it: `GET /api/fundamental-analysis/AAPL?period=annual`, or "Run
 Analysis" under Fundamental Analyst on a stock's page.
 
+## Risk Analyst
+
+Actively challenges the investment case — "what could go wrong?" — at
+`src/server/agents/risk-analyst`. This is the first purely synthesis
+agent: it introduces no new external data source and instead reuses real
+data already flowing through the app.
+
+**A deliberate cost/architecture decision:** the spec calls for
+challenging the whole investment case, but re-running every other paid AI
+agent (Fundamental Analyst, Valuation Engine, Competitor Analysis,
+Management Analysis) just to gather inputs would be both expensive and
+largely redundant. Instead this agent reuses:
+- **Free, deterministic data** from Step 1 (price/volatility, via the
+  same shared `annualizedVolatility` function the Technical Analysis
+  Agent uses), Step 5 (revenue/margin/debt/cash/free-cash-flow trends),
+  and Step 10 (real macro indicators) — see `signals.ts`.
+- **Step 7's News Intelligence output** (one AI call), filtered down to
+  its already-classified bearish and high/very-high-importance events —
+  the same efficient reuse pattern Sentiment Analysis (Step 9) uses.
+
+Total cost: two AI calls (News's + this agent's own), not eight.
+
+**Severity and probability are enforced as separate dimensions** — the
+Zod schema requires both fields independently on every risk item, and a
+dedicated test confirms a risk item missing either field is rejected.
+
+**No fabricated risks:** the system prompt requires every risk to be
+grounded in the real signals or real news events given; for risk
+categories with no supporting data point, the AI may raise the general
+consideration but must explicitly say no specific evidence is available
+rather than inventing a statistic. No exact stock-price impact is ever
+claimed — potential impact is framed in terms of which real business
+drivers could plausibly be affected.
+
+**FACT / CALCULATION / ASSUMPTION / AI INTERPRETATION / RISK ASSESSMENT:**
+the reused real data is FACT; `RiskFactorSignals` is CALCULATION
+(deterministic, `source: "calculated"`); "potential impact" framing is
+built on explicit ASSUMPTION language; the reasoning behind each risk is
+AI INTERPRETATION; severity/probability/riskScore are explicitly the
+agent's RISK ASSESSMENT, never presented as measured fact.
+
+**UI:** risk score and level lead, then the #1 risk prominently
+highlighted, then 3-5 biggest risks (each with severity, probability,
+impact, and what to watch for, shown separately), then what would make
+the AI more bearish or less worried — matching the spec's required
+section order, without overwhelming the user with dozens of risks.
+
+Try it: `GET /api/risk/AAPL`.
+
 ## Management Analysis
 
 Judges execution quality and trustworthiness of company leadership, at
@@ -599,12 +648,15 @@ schema validation, the Macro Analysis agent's real-indicator provenance,
 in-memory cache behavior, and company-specific relevance enforcement, and
 the Competitor Analysis agent's real-data metric calculations,
 competitor-relevance schema validation, and graceful degradation when
-peer identification fails, and the Management Analysis agent's
+peer identification fails, the Management Analysis agent's
 deterministic capital-allocation math, insider-transaction parsing and
 aggregation, and — notably — a dedicated test confirming the AI cannot
-fabricate a historical guidance figure (343 tests total). These are unit
-tests — a good next step is integration tests against a real test
-database.
+fabricate a historical guidance figure, and the Risk Analyst's reuse of
+shared risk signals, its filtering of news down to bearish/high-importance
+events, and — notably — a dedicated test confirming severity and
+probability are enforced as genuinely separate, independently-required
+fields (367 tests total). These are unit tests — a good next step is
+integration tests against a real test database.
 
 **Note on schema changes:** the build command uses `prisma db push
 --accept-data-loss`. This is appropriate here because `PriceBar`/`Quote`
