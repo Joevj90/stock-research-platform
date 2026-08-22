@@ -220,6 +220,82 @@ with raw ratios up front.
 Try it: `GET /api/fundamental-analysis/AAPL?period=annual`, or "Run
 Analysis" under Fundamental Analyst on a stock's page.
 
+## Prediction Tracking & Accuracy
+
+Permanently records every forecast the app makes and grades it against
+what actually happened, at `src/server/predictions`. Genuinely different
+in character from every other step — this is a data-integrity and
+statistics system, not an AI agent; it makes no AI calls at all.
+
+**Immutability is the whole point of this step, and it's enforced
+structurally, not just by convention:** `recordPredictionsFromForecast`
+writes the original prediction fields exactly once, at creation.
+`evaluatePendingPredictions` can only ever fill in the initially-null
+evaluation columns (`actualPrice`, `evaluatedAt`, `actualReturnPct`,
+`predictionErrorAbs/Pct`, `directionCorrect`, `rangeOutcome`) on a row —
+there is no code path anywhere in this module capable of rewriting an
+original prediction's price targets, probabilities, or assumptions. A
+dedicated test asserts the exact list of fields an evaluation update
+touches and confirms it never includes an original field.
+
+**No look-ahead bias:** a prediction is only evaluated once its horizon
+has genuinely elapsed (`isReadyForEvaluation`, checked both in the DB
+query and again defensively in code) — a dedicated test confirms a
+12-month prediction made today is correctly still "not ready" after only
+one month has passed, directly from the spec's own example.
+
+**Hooked in without touching Forecasting Agent itself:** rather than
+modifying Step 14's tested, deployed service to also persist data,
+recording happens at the API boundary
+(`src/app/api/forecast/[ticker]/route.ts`) — "whenever a completed stock
+analysis produces a forecast" is satisfied at the most direct point a
+forecast is actually delivered, and Forecasting Agent's own service.ts
+is completely unchanged. A 24-hour dedup window prevents the table
+filling with near-duplicate rows from repeated re-runs, without ever
+touching a record that's already there.
+
+**All arithmetic is deterministic** (`calculations.ts`) — actual return,
+prediction error (absolute and %), direction correctness (with a small
+threshold so near-zero moves aren't misclassified as a "wrong" direction
+call), which bear/base/bull range the actual price landed in, and every
+aggregate accuracy statistic. 36 dedicated tests cover this math.
+
+**No misleading percentages from small samples:** overall accuracy,
+per-horizon accuracy, and confidence calibration are all gated behind
+minimum sample sizes (5, 3, and 10 evaluated predictions respectively) —
+below the threshold, the UI shows an honest "not enough data" message
+instead of a percentage.
+
+**Confidence calibration** compares the AI's average stated confidence
+against its actual accuracy and explicitly says when the AI is more
+confident than its results justify.
+
+**Simulated performance is clearly labeled as simulated** — "SIMULATED /
+HISTORICAL — NOT ACTUAL TRADING RESULTS" — never presented as real
+trading returns, per the spec's explicit warning that accuracy and
+profitability are different things.
+
+**A pragmatic scope note:** the spec lists four horizons (1/3/6/12
+month), but Forecasting Agent only produces three (3/6/12 month) — this
+step tracks exactly those three rather than fabricating a 1-month
+prediction Forecasting Agent never actually made. Similarly, the 5-way
+AI rating (STRONG_BULLISH...STRONG_BEARISH) this step needs is derived
+deterministically from Forecasting Agent's own real expected return and
+confidence score (`deriveFiveWayRating`) rather than depending on the
+full Investment Committee/Devil's Advocate chain, keeping prediction
+recording cheap and independent of the app's most expensive endpoints.
+
+**UI:** a real SVG chart plotting each prediction's starting price, AI
+target, and actual outcome over time (color-coded correct/wrong), a
+per-ticker history table, and an app-wide accuracy dashboard (overall
+accuracy, by-horizon accuracy, confidence calibration, simulated
+performance) — all gated behind the same honest sample-size thresholds
+as the backend.
+
+Try it: `GET /api/predictions/AAPL` (per-ticker history) and
+`GET /api/predictions/accuracy` (global dashboard) — both trigger
+evaluation of any newly-due predictions first.
+
 ## Final AI Investment Report
 
 The main "Final Analysis" page — everything the app has analyzed, brought
@@ -899,7 +975,11 @@ bucketing (never fabricating a label for missing data), its real
 cross-agent consistency checking, and — notably — a dedicated test
 confirming a full report generation calls the shared 8-agent gatherer
 exactly once despite depending on Forecast, the Committee, and Devil's
-Advocate all at once (465 tests total). These are
+Advocate all at once, and Prediction Tracking's deterministic accuracy
+math (36 tests alone, including the spec's own "12-month prediction not
+wrong after 1 month" example) plus a dedicated test proving evaluation
+updates can only ever touch the initially-null evaluation columns, never
+an original prediction field (513 tests total). These are
 unit tests — a good next step is integration tests against a real test
 database.
 

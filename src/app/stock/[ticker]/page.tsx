@@ -18,6 +18,7 @@ import { ForecastPanel } from "@/components/ForecastPanel";
 import { InvestmentCommitteePanel } from "@/components/InvestmentCommitteePanel";
 import { DevilsAdvocatePanel } from "@/components/DevilsAdvocatePanel";
 import { FinalReportPanel } from "@/components/FinalReportPanel";
+import { PredictionAccuracyPanel } from "@/components/PredictionAccuracyPanel";
 import { HISTORICAL_PERIODS, type HistoricalPeriod, type StockSnapshot } from "@/lib/types";
 
 const COMING_SOON_SECTIONS = [{ title: "SEC Filings", detail: "10-K, 10-Q, 8-K retrieval" }];
@@ -139,6 +140,8 @@ function DashboardContent({ snapshot }: { snapshot: StockSnapshot }) {
       <DevilsAdvocatePanel ticker={ticker} />
 
       <FinalReportPanel ticker={ticker} />
+
+      <PredictionAccuracyPanel ticker={ticker} />
 
       <section>
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-gray-500">

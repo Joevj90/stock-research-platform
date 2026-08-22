@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runForecast } from "@/server/agents/forecasting";
+import { recordPredictionsFromForecast } from "@/server/predictions";
 import { logger } from "@/server/logger";
 
 // Depends on up to 8 other agents plus its own synthesis call -- raise
@@ -36,6 +37,11 @@ export async function GET(_req: NextRequest, { params }: { params: { ticker: str
     log.warn("forecast request failed", { ticker: params.ticker, error: result.error });
     return NextResponse.json({ error: result.error }, { status });
   }
+
+  // Permanently record this forecast for accuracy tracking (Step 18).
+  // Failure here must never prevent the user from seeing their forecast
+  // -- recordPredictionsFromForecast handles its own errors internally.
+  await recordPredictionsFromForecast(params.ticker.trim().toUpperCase(), result.data);
 
   return NextResponse.json(result.data);
 }

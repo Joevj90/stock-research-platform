@@ -36,6 +36,7 @@ model Stock {
   newsCacheEntries NewsCacheEntry[]
   insiderTransactions InsiderTransaction[]
   insiderTradingCacheEntries InsiderTradingCacheEntry[]
+  predictions Prediction[]
   analyses     Analysis[]
   forecasts    Forecast[]
 
@@ -341,4 +342,57 @@ model AnalysisSource {
 
   @@id([analysisId, sourceId])
   @@map("analysis_sources")
+}
+
+/// A single, permanent, immutable AI forecast record (Step 18).
+///
+/// CRITICAL DATA-INTEGRITY RULE: every field above the "evaluation
+/// fields" comment is written ONCE, at creation, and NEVER updated
+/// afterward -- this is what prevents look-ahead bias. The evaluation
+/// fields below start null and are filled in EXACTLY ONCE, when the
+/// prediction's horizon has genuinely elapsed and its outcome is
+/// checked -- never recalculated, never overwritten with newer
+/// information. See src/server/predictions/service.ts for the
+/// enforcement code.
+model Prediction {
+  id          String   @id @default(cuid())
+  stockId     String
+  stock       Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+
+  // --- Original prediction (immutable) ---
+  ticker              String
+  companyName         String?
+  horizon             String // "3_month" | "6_month" | "12_month"
+  predictionDate      DateTime @default(now())
+  evaluationDueDate    DateTime // predictionDate + horizon's duration -- when this may first be evaluated
+  priceAtPrediction   Float
+  bearPrice           Float
+  basePrice           Float
+  bullPrice           Float
+  expectedPrice       Float
+  expectedReturnPct   Float
+  bearProbabilityPct  Float
+  baseProbabilityPct  Float
+  bullProbabilityPct  Float
+  aiRating            String // deterministically derived 5-way label -- see calculations.ts
+  confidenceScore     Float
+  keyAssumptions      String // JSON-encoded string[]
+  majorRisks          String // JSON-encoded string[]
+  predictionVersion   String // model + schema version, for future comparability across app versions
+  provider            String
+  createdAt           DateTime @default(now())
+
+  // --- Evaluation (nullable; filled in exactly once, only after
+  // evaluationDueDate has passed) ---
+  actualPrice           Float?
+  evaluatedAt           DateTime?
+  actualReturnPct       Float?
+  predictionErrorAbs    Float? // actualPrice - predictedPrice (predictedPrice = expectedPrice)
+  predictionErrorPct    Float?
+  directionCorrect      Boolean?
+  rangeOutcome          String? // "bear" | "base" | "bull" | "outside"
+
+  @@index([ticker, horizon])
+  @@index([evaluationDueDate, evaluatedAt])
+  @@map("predictions")
 }
