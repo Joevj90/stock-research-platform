@@ -12,7 +12,7 @@ const log = logger.child("agents:devils-advocate:interpreter");
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
 const MODEL = "claude-sonnet-5";
-const FETCH_TIMEOUT_MS = 60_000;
+const FETCH_TIMEOUT_MS = 120_000; // large, detailed response -- more headroom than the app's other single-call agents
 
 const SYSTEM_PROMPT = `You are the Devil's Advocate inside a stock research application, built for people who know very little about investing. Your job is to challenge the Investment Committee's conclusion -- NOT to be automatically bearish. Your real question is: "why might our current conclusion be wrong?"
 

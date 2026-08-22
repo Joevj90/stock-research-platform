@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { runInvestmentCommittee } from "@/server/agents/investment-committee";
 import { logger } from "@/server/logger";
 
+// Two sequential AI calls (personas, then debate) on top of gathering all
+// 8 base agents -- raise Vercel's function timeout to its Hobby-plan
+// maximum so the platform doesn't cut the request off early.
+export const maxDuration = 60;
+
 const log = logger.child("api:investment-committee");
 
 const STATUS_BY_ERROR_CODE: Record<string, number> = {

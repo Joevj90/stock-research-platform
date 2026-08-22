@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { runForecast } from "@/server/agents/forecasting";
 import { logger } from "@/server/logger";
 
+// Depends on up to 8 other agents plus its own synthesis call -- raise
+// Vercel's function timeout to its Hobby-plan maximum so the platform
+// doesn't cut the request off early.
+export const maxDuration = 60;
+
 const log = logger.child("api:forecast");
 
 const STATUS_BY_ERROR_CODE: Record<string, number> = {

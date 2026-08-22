@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { runDevilsAdvocate } from "@/server/agents/devils-advocate";
 import { logger } from "@/server/logger";
 
+// This is the most sequential-AI-call-heavy endpoint in the app (waits on
+// the Investment Committee's two sequential calls, in parallel with
+// Forecasting Agent's call, then makes its own call). Raise Vercel's
+// function timeout to its Hobby-plan maximum so the platform itself
+// doesn't cut the request off before the AI calls can finish. If you're
+// on Vercel Pro or higher, you can raise this further (up to 300).
+export const maxDuration = 60;
+
 const log = logger.child("api:devils-advocate");
 
 const STATUS_BY_ERROR_CODE: Record<string, number> = {
