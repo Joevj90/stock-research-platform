@@ -1,4 +1,4 @@
-import { gatherAnalysisSummaries } from "@/server/agents/shared/analysis-summaries";
+import { gatherAnalysisSummaries, type GatheredAnalysisInputs } from "@/server/agents/shared/analysis-summaries";
 import { logger } from "@/server/logger";
 import type { Result } from "@/lib/types";
 import type { CommitteeResult } from "@/lib/investment-committee-types";
@@ -33,13 +33,21 @@ const MODEL = "claude-sonnet-5";
  * gracefully: if a sub-agent's data isn't available, the committee still
  * proceeds using whatever real evidence exists.
  */
-export async function runInvestmentCommittee(rawTicker: string): Promise<Result<CommitteeResult>> {
+/**
+ * @param precomputedGathered Optional -- see the identical parameter on
+ * `runForecast`. Lets the Devil's Advocate agent reuse one evidence
+ * gather across both this and Forecasting Agent instead of tripling it.
+ */
+export async function runInvestmentCommittee(
+  rawTicker: string,
+  precomputedGathered?: GatheredAnalysisInputs
+): Promise<Result<CommitteeResult>> {
   const ticker = rawTicker.trim().toUpperCase();
   if (!ticker) {
     return { ok: false, error: { code: "MISSING_TICKER", message: "Ticker symbol is required." } };
   }
 
-  const gathered = await gatherAnalysisSummaries(ticker);
+  const gathered = precomputedGathered ?? (await gatherAnalysisSummaries(ticker));
   if (gathered.currentPrice === null) {
     return {
       ok: false,

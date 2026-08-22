@@ -149,4 +149,14 @@ describe("runInvestmentCommittee", () => {
     if (!result.ok) expect(result.error.code).toBe("MISSING_TICKER");
     expect(gatherAnalysisSummaries).not.toHaveBeenCalled();
   });
+
+  it("uses precomputedGathered when provided, skipping the internal re-gather entirely", async () => {
+    (interpretPersonas as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true, data: FIVE_PERSONAS });
+    (interpretDebate as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true, data: SAMPLE_DEBATE_RESULT });
+
+    const result = await runInvestmentCommittee("AAPL", gathered());
+
+    expect(gatherAnalysisSummaries).not.toHaveBeenCalled();
+    expect(result.ok).toBe(true);
+  });
 });

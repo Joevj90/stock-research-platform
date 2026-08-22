@@ -235,4 +235,40 @@ describe("runForecast", () => {
     if (!result.ok) expect(result.error.code).toBe("MISSING_TICKER");
     expect(getStockSnapshot).not.toHaveBeenCalled();
   });
+
+  it("uses precomputedGathered when provided, skipping the internal re-gather entirely", async () => {
+    (interpretForecast as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true, data: SAMPLE_RAW_INTERPRETATION });
+
+    const precomputed = {
+      companyName: "Apple Inc.",
+      currentPrice: 199,
+      inputsUsed: {
+        technical: true,
+        fundamental: false,
+        valuation: false,
+        sentiment: false,
+        macro: false,
+        competitor: false,
+        management: false,
+        risk: false,
+      },
+      summaries: {
+        valuationDcfEstimates: null,
+        technicalSummary: { trend: "uptrend", momentum: "bullish", technicalScore: 20, explanation: "x" },
+        fundamentalSummary: null,
+        sentimentSummary: null,
+        macroSummary: null,
+        competitorSummary: null,
+        managementSummary: null,
+        riskSummary: null,
+      },
+    };
+
+    const result = await runForecast("AAPL", precomputed);
+
+    expect(getStockSnapshot).not.toHaveBeenCalled();
+    expect(runTechnicalAnalysis).not.toHaveBeenCalled();
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.data.currentPrice).toBe(199);
+  });
 });

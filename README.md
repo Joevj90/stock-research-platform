@@ -220,6 +220,66 @@ with raw ratios up front.
 Try it: `GET /api/fundamental-analysis/AAPL?period=annual`, or "Run
 Analysis" under Fundamental Analyst on a stock's page.
 
+## Devil's Advocate
+
+Challenges the Investment Committee's actual conclusion — "why might we
+be wrong?" — at `src/server/agents/devils-advocate`, placed near the
+Committee in the UI per spec.
+
+**A real cost-control refactor, verified before use:** this agent needs
+both Forecasting Agent's and the Investment Committee's real conclusions,
+plus the same 8-agent evidence both of those already gathered. Rather
+than letting three separate 8-agent gathers happen (Forecast's internal
+one, Committee's internal one, and a third for this agent), `runForecast`
+and `runInvestmentCommittee` were extended with an optional
+`precomputedGathered` parameter — additive and backward-compatible, and
+their full existing test suites were re-verified (plus new dedicated
+tests confirming the parameter actually skips the internal re-gather)
+before this agent was built on top of it. Devil's Advocate now gathers
+evidence exactly once and hands it to both.
+
+**Not automatically bearish — enforced as a hard rule and checked at the
+schema level:** `overallChallengeScore` measures how strongly the
+*current* thesis should be challenged, whether that thesis is bullish or
+bearish — a well-supported conclusion of either direction can score low.
+The system prompt states this explicitly and repeatedly.
+
+**No unjustified revisions:** the "send findings back to the Investment
+Committee" requirement is handled by the same AI call that produces the
+critique (it already has full context of both), but the schema enforces
+a bidirectional consistency check — `wasThesisRevised: true` requires a
+non-null revised rating/confidence/explanation, and `false` requires them
+to be null. A dedicated test confirms the schema catches a response that
+claims a revision without actually providing one (or vice versa) — this
+is exactly the kind of AI-response bug that would otherwise let a
+"cosmetic" revision slip through undetected.
+
+**Honest about what it can and can't do:** this app has no
+period-by-period historical dataset for Devil's Advocate to draw on —
+only the same compact summaries Forecast/Committee use. The system prompt
+explicitly bars inventing specific past events, dates, or figures for
+historical comparison; it may only reason from what it was actually
+given.
+
+**FACT / CALCULATION / ASSUMPTION / AI INTERPRETATION / CHALLENGE / FINAL
+CONCLUSION:** the real Committee/Forecast conclusions are FACT; no new
+numbers are calculated in this step; `questionableAssumptions` are
+explicit ASSUMPTIONs, never fact; the critique content is AI
+INTERPRETATION; `overallChallengeScore`/`challengeLevel` are explicitly
+the CHALLENGE (not a bearish score); `finalConclusion` and
+`committeeReview` are the FINAL CONCLUSION, never presented as more
+certain than the evidence supports.
+
+**UI:** challenge level and score lead, then weaknesses, the single
+assumption that worries it most, alternative interpretations, and a
+clear YES/NO/POSSIBLY on whether the rating could change — with the
+Investment Committee Review showing plainly whether anything actually
+changed, and why (or why not).
+
+Try it: `GET /api/devils-advocate/AAPL` (expect this to be the single
+slowest endpoint in the app — it depends on both Forecast's and the
+Committee's full pipelines plus its own critique call).
+
 ## AI Investment Committee
 
 The main summary users see after the individual research sections, at
@@ -774,7 +834,11 @@ must all still sum to exactly 100) and its graceful degradation across
 up to 8 independently-failing sub-agents, and the Investment Committee's
 deterministic vote tally, its two-phase persona/debate flow (including a
 dedicated test confirming Phase 2 receives Phase 1's evaluations
-unmodified), and its AI schema validation (425 tests total). These are
+unmodified), and its AI schema validation, and the Devil's Advocate's
+bidirectional committee-review consistency check (catching a response
+that claims a revision without actually providing one, or vice versa)
+and its verified `precomputedGathered` cost-sharing with Forecast and
+the Committee (443 tests total). These are
 unit tests — a good next step is integration tests against a real test
 database.
 

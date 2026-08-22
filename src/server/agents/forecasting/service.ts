@@ -1,4 +1,4 @@
-import { gatherAnalysisSummaries } from "@/server/agents/shared/analysis-summaries";
+import { gatherAnalysisSummaries, type GatheredAnalysisInputs } from "@/server/agents/shared/analysis-summaries";
 import { logger } from "@/server/logger";
 import type { Result } from "@/lib/types";
 import type {
@@ -39,13 +39,23 @@ const log = logger.child("agents:forecasting");
  * exactly which modules actually contributed -- "combine the available
  * evidence" rather than requiring every single input to succeed.
  */
-export async function runForecast(rawTicker: string): Promise<Result<ForecastResult>> {
+/**
+ * @param precomputedGathered Optional -- if the caller already has a
+ * fresh `gatherAnalysisSummaries` result (e.g. the Devil's Advocate agent,
+ * which needs the same evidence for multiple purposes), pass it here to
+ * skip a redundant re-gather. Backward compatible: existing callers that
+ * omit this behave exactly as before.
+ */
+export async function runForecast(
+  rawTicker: string,
+  precomputedGathered?: GatheredAnalysisInputs
+): Promise<Result<ForecastResult>> {
   const ticker = rawTicker.trim().toUpperCase();
   if (!ticker) {
     return { ok: false, error: { code: "MISSING_TICKER", message: "Ticker symbol is required." } };
   }
 
-  const gathered = await gatherAnalysisSummaries(ticker);
+  const gathered = precomputedGathered ?? (await gatherAnalysisSummaries(ticker));
   if (gathered.currentPrice === null) {
     return {
       ok: false,
