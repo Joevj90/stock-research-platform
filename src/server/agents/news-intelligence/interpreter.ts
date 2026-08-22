@@ -109,7 +109,7 @@ export async function interpretNews(
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 4096,
+        max_tokens: 6144, // raised from 4096 -- real, detailed data produces longer responses than the mock data this was originally tuned against
         system: SYSTEM_PROMPT,
         messages: [
           {
