@@ -49,7 +49,13 @@ export function ForecastPanel({ ticker }: { ticker: string }) {
       }
       setState({ status: "success", data: body as ForecastResult });
     } catch {
-      setState({ status: "error", message: "Something went wrong. Try again." });
+      setState({
+        status: "error",
+        message:
+          "This took too long to finish, likely due to a hosting time limit — this depends on up to 8 " +
+          "other analyses plus its own synthesis call. A paid hosting tier resolves this. Try again in " +
+          "the meantime; it sometimes finishes within the limit.",
+      });
     }
   }
 

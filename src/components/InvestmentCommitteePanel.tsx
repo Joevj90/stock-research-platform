@@ -52,7 +52,14 @@ export function InvestmentCommitteePanel({ ticker }: { ticker: string }) {
       }
       setState({ status: "success", data: body as CommitteeResult });
     } catch {
-      setState({ status: "error", message: "Something went wrong. Try again." });
+      setState({
+        status: "error",
+        message:
+          "This took too long to finish, likely due to a hosting time limit — this combines five persona " +
+          "evaluations and a debate/consensus step, on top of the same 8-agent evidence Forecasting Agent " +
+          "uses. A paid hosting tier resolves this. Try again in the meantime; it sometimes finishes within " +
+          "the limit.",
+      });
     }
   }
 
