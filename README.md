@@ -220,6 +220,65 @@ with raw ratios up front.
 Try it: `GET /api/fundamental-analysis/AAPL?period=annual`, or "Run
 Analysis" under Fundamental Analyst on a stock's page.
 
+## AI Investment Committee
+
+The main summary users see after the individual research sections, at
+`src/server/agents/investment-committee` — five analyst personas with
+distinct philosophies independently review the real evidence, then
+debate and reach a final rating.
+
+**A second top-level synthesis agent, architecturally parallel to
+Forecasting Agent, not nested inside it:** both use the same shared
+`gatherAnalysisSummaries` (`src/server/agents/shared/analysis-summaries.ts`)
+to call the 8 underlying analysis agents (Technical, Fundamental,
+Valuation, Sentiment, Macro, Competitor, Management, Risk) — extracted
+this step specifically so Forecasting and the Committee don't duplicate
+that gathering logic between them. (Refactoring Forecasting Agent's
+service to use the shared gatherer was verified against its full
+existing test suite before this step continued — nothing broke.)
+
+**Two AI calls, not six:** rather than one API call per persona plus a
+separate consensus call, Phase 1 (`personas-interpreter.ts`) generates
+all five personas' independent evaluations in a single structured call —
+the system prompt explicitly forbids restating the same recommendation
+five times and requires each persona's philosophy to genuinely drive
+different conclusions when the evidence supports it. Phase 2
+(`debate-interpreter.ts`) receives Phase 1's five evaluations as FIXED
+input (it cannot alter what they already concluded) and produces debate
+exchanges, agreement/disagreement analysis, and the final synthesized
+recommendation.
+
+**Vote counting is never trusted to the AI:** `vote-tally.ts` counts how
+many personas voted buy/hold/sell in code — pure counting, the same
+"verify calculations programmatically" principle Forecasting Agent
+applies to its probability math. The AI's `finalRecommendation` is
+explicitly NOT required to match the simple majority — the system prompt
+instructs a genuine qualitative synthesis weighing conviction and
+evidence quality, and the UI displays the deterministic vote tally
+alongside the AI's (possibly different) final call so the two are never
+confused.
+
+**A minority view is preserved, not hidden:** if a persona dissented for
+a substantive reason, `minorityViewWorthConsidering` surfaces it even
+though it didn't carry the final recommendation.
+
+**FACT / CALCULATION / AI OPINION / FINAL CONCLUSION:** the 8 agents'
+real outputs are FACT; `VoteTally` is CALCULATION (`source: "calculated"`);
+persona evaluations and debate are AI OPINION; `overallConclusion` /
+`recommendationRationale` are the FINAL CONCLUSION, explicitly the
+committee's judgment, never presented as settled fact.
+
+**UI:** "What The AI Thinks" leads (the main summary, per spec), then the
+rating/confidence/vote tally, reasons to be optimistic/careful, with the
+full persona-by-persona votes, debate exchanges, and disagreement detail
+available behind a "Show full committee detail" toggle — understandable
+without expanding anything, but expandable for anyone who wants the
+supporting reasoning.
+
+Try it: `GET /api/investment-committee/AAPL` (expect this to be at least
+as slow as the Forecasting Agent, since it depends on the same 8 agents
+plus two more AI calls of its own).
+
 ## Forecasting Agent
 
 The master synthesis agent — "based on everything we know, what could
@@ -709,10 +768,13 @@ fabricate a historical guidance figure, and the Risk Analyst's reuse of
 shared risk signals, its filtering of news down to bearish/high-importance
 events, and — notably — a dedicated test confirming severity and
 probability are enforced as genuinely separate, independently-required
-fields, and the Forecasting Agent's deterministic calculation math
+fields, the Forecasting Agent's deterministic calculation math
 (18 tests alone, including a sweep across a dozen probability inputs that
 must all still sum to exactly 100) and its graceful degradation across
-up to 8 independently-failing sub-agents (400 tests total). These are
+up to 8 independently-failing sub-agents, and the Investment Committee's
+deterministic vote tally, its two-phase persona/debate flow (including a
+dedicated test confirming Phase 2 receives Phase 1's evaluations
+unmodified), and its AI schema validation (425 tests total). These are
 unit tests — a good next step is integration tests against a real test
 database.
 

@@ -190,16 +190,24 @@ describe("runForecast", () => {
     }
   });
 
-  it("propagates a snapshot error without calling any sub-agent", async () => {
+  it("returns an error when no price data can be found for the ticker, even though sub-agents run in parallel with the snapshot fetch", async () => {
     (getStockSnapshot as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: false,
       error: { code: "INVALID_TICKER", message: "bad ticker" },
     });
+    (runTechnicalAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
+    (runFundamentalAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
+    (runValuationAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
+    (runSentimentAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
+    (runMacroAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
+    (runCompetitorAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
+    (runManagementAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
+    (runRiskAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
 
     const result = await runForecast("ZZZZZ");
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("INVALID_TICKER");
-    expect(runTechnicalAnalysis).not.toHaveBeenCalled();
+    expect(interpretForecast).not.toHaveBeenCalled();
   });
 
   it("propagates an AI interpretation error (e.g. AI_NOT_CONFIGURED)", async () => {

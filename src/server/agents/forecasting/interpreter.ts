@@ -2,6 +2,7 @@ import { z } from "zod";
 import { env } from "@/server/config/env";
 import { logger } from "@/server/logger";
 import type { Result } from "@/lib/types";
+import type { AnalysisSummaries } from "@/server/agents/shared/analysis-summaries";
 
 const log = logger.child("agents:forecasting:interpreter");
 
@@ -100,18 +101,10 @@ export type RawForecastInterpretation = z.infer<typeof InterpretationSchema> & {
   generatedAt: string;
 };
 
-export interface ForecastInterpreterInput {
+export interface ForecastInterpreterInput extends AnalysisSummaries {
   ticker: string;
   companyName: string | null;
   currentPrice: number;
-  valuationDcfEstimates: { bearFairValue: number | null; baseFairValue: number | null; bullFairValue: number | null } | null;
-  technicalSummary: { trend: string; momentum: string; technicalScore: number; explanation: string } | null;
-  fundamentalSummary: { overallFundamentalScore: number; overallConclusion: string } | null;
-  sentimentSummary: { sentimentScore: number; sentimentDirection: string; sentimentTrend: string; overallConclusion: string } | null;
-  macroSummary: { macroScore: number; overallMacroEnvironment: string; overallConclusion: string } | null;
-  competitorSummary: { competitiveScore: number; whoIsWinning: string; biggestCompetitiveThreat: string } | null;
-  managementSummary: { managementScore: number; overallAssessment: string; overallConclusion: string } | null;
-  riskSummary: { riskScore: number; riskLevel: string; numberOneRisk: string; overallConclusion: string } | null;
 }
 
 /**

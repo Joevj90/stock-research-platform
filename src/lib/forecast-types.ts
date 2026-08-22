@@ -1,3 +1,5 @@
+import type { AnalysisInputsAvailability } from "@/server/agents/shared/analysis-summaries";
+
 /**
  * Forecasting Agent domain types.
  *
@@ -69,17 +71,10 @@ export interface ForecastAssumption {
 
 /** Which existing analysis modules actually contributed real data to
  * this forecast -- since any of them can fail independently (e.g. an
- * FMP plan limitation) without failing the whole forecast. */
-export interface ForecastInputsAvailability {
-  technical: boolean;
-  fundamental: boolean;
-  valuation: boolean;
-  sentiment: boolean;
-  macro: boolean;
-  competitor: boolean;
-  management: boolean;
-  risk: boolean;
-}
+ * FMP plan limitation) without failing the whole forecast. Re-exported
+ * as an alias of the shared type so Forecasting and Investment Committee
+ * (Step 15) use the exact same shape, not two separately-defined ones. */
+export type ForecastInputsAvailability = AnalysisInputsAvailability;
 
 export interface ForecastInterpretation {
   source: "ai";

@@ -15,12 +15,11 @@ import { CompetitorAnalysisPanel } from "@/components/CompetitorAnalysisPanel";
 import { ManagementAnalysisPanel } from "@/components/ManagementAnalysisPanel";
 import { RiskAnalystPanel } from "@/components/RiskAnalystPanel";
 import { ForecastPanel } from "@/components/ForecastPanel";
+import { InvestmentCommitteePanel } from "@/components/InvestmentCommitteePanel";
 import { HISTORICAL_PERIODS, type HistoricalPeriod, type StockSnapshot } from "@/lib/types";
 
 const COMING_SOON_SECTIONS = [
   { title: "SEC Filings", detail: "10-K, 10-Q, 8-K retrieval" },
-  { title: "AI Analyst Panel", detail: "Independent multi-agent analysis" },
-  { title: "Investment Committee", detail: "Cross-examines the analysts" },
   { title: "Devil's Advocate", detail: "Actively tries to disprove the thesis" },
   { title: "Final Report", detail: "Cited, confidence-scored synthesis" },
 ];
@@ -136,6 +135,8 @@ function DashboardContent({ snapshot }: { snapshot: StockSnapshot }) {
       <RiskAnalystPanel ticker={ticker} />
 
       <ForecastPanel ticker={ticker} />
+
+      <InvestmentCommitteePanel ticker={ticker} />
 
       <section>
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-gray-500">
