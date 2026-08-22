@@ -21,6 +21,14 @@ import { runCompetitorAnalysis } from "@/server/agents/competitor-analysis";
 import { runManagementAnalysis } from "@/server/agents/management-analysis";
 import { runRiskAnalysis } from "@/server/agents/risk-analyst";
 import { logger } from "@/server/logger";
+import type { TechnicalAnalysisResult } from "@/server/agents/technical-analysis";
+import type { FundamentalAnalystResult } from "@/server/agents/fundamental-analyst";
+import type { ValuationResult } from "@/server/agents/valuation-engine";
+import type { SentimentResult } from "@/server/agents/sentiment-analysis";
+import type { MacroResult } from "@/server/agents/macro-analysis";
+import type { CompetitorAnalysisResult } from "@/server/agents/competitor-analysis";
+import type { ManagementAnalysisResult } from "@/server/agents/management-analysis";
+import type { RiskAnalysisResult } from "@/server/agents/risk-analyst";
 
 const log = logger.child("agents:shared:analysis-summaries");
 
@@ -49,11 +57,29 @@ export interface AnalysisSummaries {
   riskSummary: { riskScore: number; riskLevel: string; numberOneRisk: string; overallConclusion: string } | null;
 }
 
+/** The FULL result object from each of the 8 agents, not just a compact
+ * summary -- exposed alongside `summaries` because it's already computed
+ * in memory by the same calls; returning it costs nothing extra and lets
+ * agents that need real detail (e.g. the Final Report, Step 17) avoid a
+ * second redundant gather. Forecasting Agent and the Investment
+ * Committee only ever read `summaries`; this field is additive. */
+export interface AnalysisFullResults {
+  technical: TechnicalAnalysisResult | null;
+  fundamental: FundamentalAnalystResult | null;
+  valuation: ValuationResult | null;
+  sentiment: SentimentResult | null;
+  macro: MacroResult | null;
+  competitor: CompetitorAnalysisResult | null;
+  management: ManagementAnalysisResult | null;
+  risk: RiskAnalysisResult | null;
+}
+
 export interface GatheredAnalysisInputs {
   companyName: string | null;
   currentPrice: number | null;
   inputsUsed: AnalysisInputsAvailability;
   summaries: AnalysisSummaries;
+  full: AnalysisFullResults;
 }
 
 /**
@@ -93,6 +119,16 @@ export async function gatherAnalysisSummaries(ticker: string): Promise<GatheredA
     companyName: snapshot?.ok === true ? snapshot.data.companyName : null,
     currentPrice: snapshot?.ok === true ? snapshot.data.quote.price : null,
     inputsUsed,
+    full: {
+      technical: technical?.ok === true ? technical.data : null,
+      fundamental: fundamental?.ok === true ? fundamental.data : null,
+      valuation: valuation?.ok === true ? valuation.data : null,
+      sentiment: sentiment?.ok === true ? sentiment.data : null,
+      macro: macro?.ok === true ? macro.data : null,
+      competitor: competitor?.ok === true ? competitor.data : null,
+      management: management?.ok === true ? management.data : null,
+      risk: risk?.ok === true ? risk.data : null,
+    },
     summaries: {
       valuationDcfEstimates:
         valuation?.ok === true

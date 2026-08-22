@@ -1,4 +1,7 @@
 import type { CommitteeRecommendation } from "@/lib/investment-committee-types";
+import type { CommitteeResult } from "@/lib/investment-committee-types";
+import type { ForecastResult } from "@/lib/forecast-types";
+import type { GatheredAnalysisInputs } from "@/server/agents/shared/analysis-summaries";
 
 /**
  * Devil's Advocate domain types.
@@ -95,4 +98,14 @@ export interface DevilsAdvocateResult {
   originalCommitteeConfidence: number;
   interpretation: DevilsAdvocateInterpretation;
   committeeReview: CommitteeReview;
+  /** The full underlying evidence/Forecast/Committee results this
+   * critique was built on -- exposed so callers that need more than the
+   * critique itself (the Final Report, Step 17) don't have to re-derive
+   * them. `forecast` is null only if Forecasting Agent itself failed;
+   * `committee` and `gathered` are always present since this function
+   * returns an error instead of a result when the Committee is
+   * unavailable. */
+  gathered: GatheredAnalysisInputs;
+  forecast: ForecastResult | null;
+  committee: CommitteeResult;
 }

@@ -44,6 +44,16 @@ function gathered(currentPrice: number | null = 200): GatheredAnalysisInputs {
       managementSummary: null,
       riskSummary: null,
     },
+    full: {
+      technical: null,
+      fundamental: null,
+      valuation: null,
+      sentiment: null,
+      macro: null,
+      competitor: null,
+      management: null,
+      risk: null,
+    },
   };
 }
 

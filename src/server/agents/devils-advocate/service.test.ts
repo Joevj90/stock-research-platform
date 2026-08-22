@@ -41,6 +41,16 @@ function gathered(currentPrice: number | null = 200): GatheredAnalysisInputs {
       managementSummary: null,
       riskSummary: null,
     },
+    full: {
+      technical: null,
+      fundamental: null,
+      valuation: null,
+      sentiment: null,
+      macro: null,
+      competitor: null,
+      management: null,
+      risk: null,
+    },
   };
 }
 
@@ -231,5 +241,25 @@ describe("runDevilsAdvocate", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("MISSING_TICKER");
     expect(gatherAnalysisSummaries).not.toHaveBeenCalled();
+  });
+
+  it("uses precomputed gathered/forecast/committee results when provided, skipping all internal derivation", async () => {
+    (interpretDevilsAdvocate as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true, data: SAMPLE_INTERPRETER_OUTPUT });
+
+    const g = gathered();
+    const fr = { ok: true as const, data: forecastResult() };
+    const cr = { ok: true as const, data: committeeResult() };
+
+    const result = await runDevilsAdvocate("AAPL", { gathered: g, forecastResult: fr, committeeResult: cr });
+
+    expect(gatherAnalysisSummaries).not.toHaveBeenCalled();
+    expect(runForecast).not.toHaveBeenCalled();
+    expect(runInvestmentCommittee).not.toHaveBeenCalled();
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.forecast).toEqual(fr.data);
+      expect(result.data.committee).toEqual(cr.data);
+      expect(result.data.gathered).toEqual(g);
+    }
   });
 });

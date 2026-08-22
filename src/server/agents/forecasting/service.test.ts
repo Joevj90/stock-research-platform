@@ -262,6 +262,16 @@ describe("runForecast", () => {
         managementSummary: null,
         riskSummary: null,
       },
+      full: {
+        technical: null,
+        fundamental: null,
+        valuation: null,
+        sentiment: null,
+        macro: null,
+        competitor: null,
+        management: null,
+        risk: null,
+      },
     };
 
     const result = await runForecast("AAPL", precomputed);

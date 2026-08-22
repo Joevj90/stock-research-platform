@@ -220,6 +220,62 @@ with raw ratios up front.
 Try it: `GET /api/fundamental-analysis/AAPL?period=annual`, or "Run
 Analysis" under Fundamental Analyst on a stock's page.
 
+## Final AI Investment Report
+
+The main "Final Analysis" page — everything the app has analyzed, brought
+together into one report, at `src/server/agents/final-report`.
+
+**Genuinely different in character from every other synthesis step: this
+one makes NO new AI call at all.** The spec is explicit — "do not
+independently calculate new financial metrics unless necessary" and "use
+the existing outputs" — so this service is pure deterministic assembly:
+every section either copies real data directly from an existing agent's
+output, or applies a deterministic label (`labels.ts`) to a real score
+that agent already computed (e.g. -100..100 → STRONG/GOOD/AVERAGE/WEAK/
+VERY_WEAK). `labels.ts` never guesses a label for missing data — a null
+score always maps to "unavailable", never a fabricated middle value.
+
+**Zero added AI-call cost beyond Devil's Advocate's own chain:** this
+service gathers the 8-agent evidence exactly once and feeds it into
+`runForecast`, `runInvestmentCommittee`, and `runDevilsAdvocate` via
+their `precomputed`/`precomputedGathered` parameters — the last of these
+(`DevilsAdvocatePrecomputed`) was added this step specifically so Final
+Report could reuse Devil's Advocate's exact chain (gather → Forecast →
+Committee → critique) at no extra cost, and Devil's Advocate's own result
+type was extended to expose the full underlying `gathered`/`forecast`/
+`committee` objects it already had in scope but wasn't returning before.
+A dedicated test confirms `gatherAnalysisSummaries` is called exactly
+once for a full report generation. The one genuinely new call is
+`runNewsIntelligence` — section 7 needs real article URLs the shared
+gatherer's compact summaries never carried.
+
+**The Devil's Advocate's revision, when there is one, wins:** the
+report's headline rating/confidence reflect `committeeReview.wasThesisRevised`
+— if the Devil's Advocate's critique was strong enough to change the
+Investment Committee's mind, the Final Report shows the *revised*
+conclusion, not the stale original.
+
+**Real (if simple) cross-agent consistency checking:** rather than
+silently picking a number when agents' real conclusions are in tension,
+`buildDataConsistencyNotes` flags a checkable case — e.g. Valuation rating
+"expensive" alongside a strongly positive expected return — and explains
+what it means, satisfying "identify the conflict... explain the
+discrepancy when important" without inventing a resolution.
+
+**Never presented as certain:** every price is explicitly framed as an
+estimate (reusing Forecasting Agent's already-rounded, no-false-precision
+figures), and the bottom line explicitly names "the biggest uncertainty."
+
+**UI:** designed to be read top-to-bottom without expanding anything —
+quick answer, why-liked/why-worried, bear/base/bull, business quality,
+valuation, what's happening now (with real source links), sentiment,
+economy, competition, management, biggest risks, Devil's Advocate summary,
+what would change the AI's mind, and the bottom line — all sourced from
+real, already-computed data.
+
+Try it: `GET /api/final-report/AAPL` (expect this to take at least as
+long as Devil's Advocate alone, since it depends on that exact chain).
+
 ## Devil's Advocate
 
 Challenges the Investment Committee's actual conclusion — "why might we
@@ -838,7 +894,12 @@ unmodified), and its AI schema validation, and the Devil's Advocate's
 bidirectional committee-review consistency check (catching a response
 that claims a revision without actually providing one, or vice versa)
 and its verified `precomputedGathered` cost-sharing with Forecast and
-the Committee (443 tests total). These are
+the Committee, and the Final AI Investment Report's deterministic label
+bucketing (never fabricating a label for missing data), its real
+cross-agent consistency checking, and — notably — a dedicated test
+confirming a full report generation calls the shared 8-agent gatherer
+exactly once despite depending on Forecast, the Committee, and Devil's
+Advocate all at once (465 tests total). These are
 unit tests — a good next step is integration tests against a real test
 database.
 

@@ -17,12 +17,10 @@ import { RiskAnalystPanel } from "@/components/RiskAnalystPanel";
 import { ForecastPanel } from "@/components/ForecastPanel";
 import { InvestmentCommitteePanel } from "@/components/InvestmentCommitteePanel";
 import { DevilsAdvocatePanel } from "@/components/DevilsAdvocatePanel";
+import { FinalReportPanel } from "@/components/FinalReportPanel";
 import { HISTORICAL_PERIODS, type HistoricalPeriod, type StockSnapshot } from "@/lib/types";
 
-const COMING_SOON_SECTIONS = [
-  { title: "SEC Filings", detail: "10-K, 10-Q, 8-K retrieval" },
-  { title: "Final Report", detail: "Cited, confidence-scored synthesis" },
-];
+const COMING_SOON_SECTIONS = [{ title: "SEC Filings", detail: "10-K, 10-Q, 8-K retrieval" }];
 
 function parsePeriod(value: string | undefined): HistoricalPeriod {
   if (value && (HISTORICAL_PERIODS as string[]).includes(value)) {
@@ -139,6 +137,8 @@ function DashboardContent({ snapshot }: { snapshot: StockSnapshot }) {
       <InvestmentCommitteePanel ticker={ticker} />
 
       <DevilsAdvocatePanel ticker={ticker} />
+
+      <FinalReportPanel ticker={ticker} />
 
       <section>
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-gray-500">
