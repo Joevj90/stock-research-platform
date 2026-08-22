@@ -3,6 +3,10 @@ import { runTechnicalAnalysis } from "@/server/agents/technical-analysis";
 import { logger } from "@/server/logger";
 import { HISTORICAL_PERIODS, type HistoricalPeriod } from "@/lib/types";
 
+// Real, detailed data can take longer to generate than Vercel's default
+// function timeout allows -- raise it to the Hobby-plan maximum.
+export const maxDuration = 60;
+
 const log = logger.child("api:technical-analysis");
 
 const STATUS_BY_ERROR_CODE: Record<string, number> = {

@@ -3,6 +3,10 @@ import { runFundamentalAnalysis } from "@/server/agents/fundamental-analyst";
 import { logger } from "@/server/logger";
 import type { FinancialPeriodType } from "@/lib/fundamentals-types";
 
+// Real, detailed data can take longer to generate than Vercel's default
+// function timeout allows -- raise it to the Hobby-plan maximum.
+export const maxDuration = 60;
+
 const log = logger.child("api:fundamental-analysis");
 
 const STATUS_BY_ERROR_CODE: Record<string, number> = {
