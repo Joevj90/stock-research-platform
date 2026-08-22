@@ -14,12 +14,11 @@ import { MacroAnalysisPanel } from "@/components/MacroAnalysisPanel";
 import { CompetitorAnalysisPanel } from "@/components/CompetitorAnalysisPanel";
 import { ManagementAnalysisPanel } from "@/components/ManagementAnalysisPanel";
 import { RiskAnalystPanel } from "@/components/RiskAnalystPanel";
+import { ForecastPanel } from "@/components/ForecastPanel";
 import { HISTORICAL_PERIODS, type HistoricalPeriod, type StockSnapshot } from "@/lib/types";
 
 const COMING_SOON_SECTIONS = [
   { title: "SEC Filings", detail: "10-K, 10-Q, 8-K retrieval" },
-  { title: "Bull / Base / Bear", detail: "Scenario analysis" },
-  { title: "12-Month Forecast", detail: "Price target with confidence" },
   { title: "AI Analyst Panel", detail: "Independent multi-agent analysis" },
   { title: "Investment Committee", detail: "Cross-examines the analysts" },
   { title: "Devil's Advocate", detail: "Actively tries to disprove the thesis" },
@@ -135,6 +134,8 @@ function DashboardContent({ snapshot }: { snapshot: StockSnapshot }) {
       <ManagementAnalysisPanel ticker={ticker} />
 
       <RiskAnalystPanel ticker={ticker} />
+
+      <ForecastPanel ticker={ticker} />
 
       <section>
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-gray-500">

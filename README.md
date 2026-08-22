@@ -220,6 +220,60 @@ with raw ratios up front.
 Try it: `GET /api/fundamental-analysis/AAPL?period=annual`, or "Run
 Analysis" under Fundamental Analyst on a stock's page.
 
+## Forecasting Agent
+
+The master synthesis agent — "based on everything we know, what could
+happen to this stock?" — at `src/server/agents/forecasting`.
+
+**"Do not create duplicate versions of these analyses" taken to its full
+conclusion:** this agent calls the REAL `run*` functions of every other
+analysis agent built in Steps 4, 6, 8, 9, 10, 11, 12, and 13 (Technical,
+Fundamental, Valuation, Sentiment, Macro, Competitor, Management, Risk),
+all in parallel, and uses their actual outputs as inputs. There is no
+second implementation of a technical score, a DCF estimate, a sentiment
+read, etc. anywhere in this agent — those numbers can only come from the
+real modules.
+
+**Honest about cost:** this is, by a wide margin, the most expensive
+single action in the app — up to 8 other AI agents (two of which
+internally call News Intelligence themselves) plus this agent's own
+synthesis call. The UI says so plainly before the button is clicked
+("can take up to a minute"), and the response shows exactly which of the
+8 inputs actually contributed (`inputsUsed`), since any of them can fail
+independently (e.g. an FMP plan limit) without failing the whole
+forecast — "combine the available evidence," not "require every input to
+succeed."
+
+**Arithmetic is never done by the LLM — this is the core requirement of
+this step, enforced structurally:** the AI provides each scenario's price
+target and probability judgment; `calculations.ts` then deterministically
+(a) normalizes bear+base+bull probabilities to sum to EXACTLY 100 no
+matter what the AI produced, (b) computes Expected Price as the
+probability-weighted average, (c) computes Expected Return, and (d)
+rounds every price to avoid false precision (e.g. never "$183.47"). 18
+dedicated tests cover this math, including a sweep across a dozen awkward
+probability inputs that all must still sum to exactly 100.
+
+**Valuation Engine's real DCF bear/base/bull fair values anchor the price
+targets** rather than the AI inventing numbers from nothing — passed in
+as `valuationDcfEstimates`, another instance of reuse over duplication.
+
+**FACT / ASSUMPTION / CALCULATION / FORECAST / AI INTERPRETATION:** the
+other agents' real outputs are FACT; explicit assumptions are labeled and
+explained, never presented as fact; expected price/return and normalized
+probabilities are CALCULATION; each scenario's price target is a
+FORECAST (an estimate under stated assumptions, never a guarantee); the
+narratives, catalysts, and confidence explanation are AI INTERPRETATION.
+
+**UI:** current price, a visual bear/base/bull range chart, scenario
+cards (with the most-likely scenario highlighted), expected price/return,
+confidence score, catalysts, a risk summary (not a duplicate of the full
+Risk Analyst output), and forecast assumptions — with a horizon switcher
+for 3/6/12 months.
+
+Try it: `GET /api/forecast/AAPL` (expect this one to take noticeably
+longer than any other endpoint in the app).
+
 ## Risk Analyst
 
 Actively challenges the investment case — "what could go wrong?" — at
@@ -655,8 +709,12 @@ fabricate a historical guidance figure, and the Risk Analyst's reuse of
 shared risk signals, its filtering of news down to bearish/high-importance
 events, and — notably — a dedicated test confirming severity and
 probability are enforced as genuinely separate, independently-required
-fields (367 tests total). These are unit tests — a good next step is
-integration tests against a real test database.
+fields, and the Forecasting Agent's deterministic calculation math
+(18 tests alone, including a sweep across a dozen probability inputs that
+must all still sum to exactly 100) and its graceful degradation across
+up to 8 independently-failing sub-agents (400 tests total). These are
+unit tests — a good next step is integration tests against a real test
+database.
 
 **Note on schema changes:** the build command uses `prisma db push
 --accept-data-loss`. This is appropriate here because `PriceBar`/`Quote`
