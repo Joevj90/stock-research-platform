@@ -32,9 +32,9 @@ CRITICAL RULES:
 
 Respond with ONLY a single JSON object, no markdown code fences, no prose before or after, matching exactly this shape:
 {
-  "keyAgreements": [array of short plain-language strings describing what the personas agree on],
-  "keyDisagreements": [ { "topic": "short label", "description": "plain-language description of the disagreement", "sidesSummary": "plain language: who leans which way and why" } ],
-  "debateExchanges": [ { "personaA": one of the 5 persona keys, "personaB": one of the 5 persona keys, "challenge": "what personaA pushes back on, in plain language", "response": "how personaB responds, in plain language" } ],
+  "keyAgreements": [up to 5 short plain-language strings describing what the personas agree on],
+  "keyDisagreements": [ up to 5 items: { "topic": "short label", "description": "plain-language description of the disagreement", "sidesSummary": "plain language: who leans which way and why" } ],
+  "debateExchanges": [ up to 4 items: { "personaA": one of the 5 persona keys, "personaB": one of the 5 persona keys, "challenge": "what personaA pushes back on, in plain language", "response": "how personaB responds, in plain language" } ],
   "finalRecommendation": "buy" | "hold" | "sell",
   "finalConfidence": integer 0-100,
   "recommendationRationale": "plain-language explanation of the final recommendation, per rule 1 -- explicitly not a simple vote count",

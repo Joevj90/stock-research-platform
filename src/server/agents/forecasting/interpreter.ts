@@ -32,7 +32,7 @@ Respond with ONLY a single JSON object, no markdown code fences, no prose before
       "horizon": "3_month",
       "dataSupportsThisHorizon": boolean,
       "limitationNote": string or null (required, non-null, if dataSupportsThisHorizon is false),
-      "bear": { "explanation": string, "estimatedFinancialOutcome": string, "priceTarget": number, "probabilityPct": number, "mainReasons": [string], "keyRisks": [string] },
+      "bear": { "explanation": string, "estimatedFinancialOutcome": string, "priceTarget": number, "probabilityPct": number, "mainReasons": [up to 3 short strings], "keyRisks": [up to 3 short strings] },
       "base": { same shape as bear },
       "bull": { same shape as bear },
       "mostLikelyScenario": "bear" | "base" | "bull"
@@ -40,13 +40,13 @@ Respond with ONLY a single JSON object, no markdown code fences, no prose before
     { "horizon": "6_month", ... same shape ... },
     { "horizon": "12_month", ... same shape ... }
   ],
-  "keyCatalysts": [ { "whatCouldHappen": string, "whyItWouldHelp": string, "importance": "low"|"medium"|"high" } ],
-  "keyRisksSummary": [ array of short plain-language strings ],
+  "keyCatalysts": [ up to 4 items: { "whatCouldHappen": string, "whyItWouldHelp": string, "importance": "low"|"medium"|"high" } ],
+  "keyRisksSummary": [ up to 4 short plain-language strings ],
   "confidenceScore": integer 0-100,
   "confidenceExplanation": "plain-language explanation of the confidence score, per rule 5",
   "biggestOptimismReason": "plain-language, the single biggest reason for optimism",
   "biggestRiskReason": "plain-language, the single biggest risk",
-  "assumptions": [ { "assumption": "short label", "explanation": "plain-language explanation of what this assumption means" } ],
+  "assumptions": [ up to 5 items: { "assumption": "short label", "explanation": "plain-language explanation of what this assumption means" } ],
   "overallConclusion": "3-5 plain-language sentences, following the pattern: our most likely outcome is the Base Case, the biggest reason for optimism is X, the biggest risk is Y"
 }
 

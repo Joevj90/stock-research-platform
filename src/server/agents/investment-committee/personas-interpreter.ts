@@ -35,8 +35,8 @@ Respond with ONLY a single JSON object, no markdown code fences, no prose before
       "persona": "value_investor",
       "recommendation": "buy" | "hold" | "sell",
       "confidence": integer 0-100,
-      "keyReasons": [array of short plain-language strings, grounded in the given data],
-      "concernsOrCaveats": [array of short plain-language strings],
+      "keyReasons": [up to 4 short plain-language strings, grounded in the given data],
+      "concernsOrCaveats": [up to 3 short plain-language strings],
       "whatTheyWeighMost": "1 short plain-language sentence describing this persona's lens on this specific stock"
     },
     { same shape, "persona": "growth_investor" },

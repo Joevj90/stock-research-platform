@@ -43,8 +43,8 @@ Respond with ONLY a single JSON object, no markdown code fences, no prose before
     }
   ],
   "numberOneRisk": { same shape as one entry in biggestRisks -- must be one of the items also in biggestRisks, chosen for the greatest combination of credibility, potential impact, and relevance, not because it sounds dramatic },
-  "whatWouldMakeMoreBearish": [ array of short plain-language specific events/thresholds that would make the outlook worse -- only include a specific number/threshold if the given data actually supports it ],
-  "whatWouldMakeLessWorried": [ array of short plain-language specific developments that would reduce the identified risks ],
+  "whatWouldMakeMoreBearish": [ up to 4 short plain-language specific events/thresholds that would make the outlook worse -- only include a specific number/threshold if the given data actually supports it ],
+  "whatWouldMakeLessWorried": [ up to 4 short plain-language specific developments that would reduce the identified risks ],
   "overallConclusion": "2-5 plain-language sentences summarizing the overall risk picture"
 }
 

@@ -28,7 +28,7 @@ Respond with ONLY a single JSON object, no markdown code fences, no prose before
 {
   "competitiveScore": integer from -100 (significant competitive disadvantage) to 100 (exceptionally strong position),
   "confidenceScore": number from 0 to 1,
-  "competitorSelections": [ { "ticker": string, "companyName": string or null, "whyRelevant": "plain-language reason this is a genuine competitor" } ],
+  "competitorSelections": [ up to 5 items: { "ticker": string, "companyName": string or null, "whyRelevant": "plain-language reason this is a genuine competitor" } ],
   "comparisonTable": [
     {
       "ticker": string,
@@ -41,8 +41,8 @@ Respond with ONLY a single JSON object, no markdown code fences, no prose before
     }
   ],
   "whoIsWinning": "2-4 plain-language sentences directly answering who is winning and why",
-  "companyStrengths": [ { "factor": "short label", "explanation": "plain-language explanation" } ],
-  "companyWeaknesses": [ { "factor": "short label", "explanation": "plain-language explanation" } ],
+  "companyStrengths": [ up to 5 items: { "factor": "short label", "explanation": "plain-language explanation" } ],
+  "companyWeaknesses": [ up to 5 items: { "factor": "short label", "explanation": "plain-language explanation" } ],
   "biggestCompetitiveThreat": "plain-language description of the single biggest competitive threat",
   "overallConclusion": "2-5 plain-language sentences summarizing the competitive picture"
 }
