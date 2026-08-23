@@ -39,10 +39,10 @@ Respond with ONLY a single JSON object, no markdown code fences, no prose before
   "balanceSheetAssessment": { "whatHappened": string, "whyItMatters": string, "isGoodOrBad": string },
   "growthAssessment": { "whatHappened": string, "whyItMatters": string, "isGoodOrBad": string },
   "financialStrengthAssessment": { "whatHappened": string, "whyItMatters": string, "isGoodOrBad": string },
-  "positiveFactors": array of short plain-language strings, each citing a specific given number,
-  "negativeFactors": array of short plain-language strings, each citing a specific given number,
-  "importantTrends": array of short plain-language strings describing multi-period patterns actually present in the data,
-  "keyConcerns": array of short plain-language strings -- empty array if there are genuinely none,
+  "positiveFactors": up to 5 short plain-language strings, each citing a specific given number,
+  "negativeFactors": up to 5 short plain-language strings, each citing a specific given number,
+  "importantTrends": up to 4 short plain-language strings describing multi-period patterns actually present in the data,
+  "keyConcerns": up to 4 short plain-language strings -- empty array if there are genuinely none,
   "overallConclusion": a 3-5 sentence plain-language synthesis explaining the overall score, written the way you'd explain it to a friend with no finance background
 }`;
 

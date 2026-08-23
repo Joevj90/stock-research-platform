@@ -24,8 +24,8 @@ Respond with ONLY a single JSON object, no markdown code fences, no prose before
 {
   "trend": one of "strong_uptrend" | "uptrend" | "sideways" | "downtrend" | "strong_downtrend",
   "momentum": one of "overbought" | "bullish" | "neutral" | "bearish" | "oversold",
-  "bullishSignals": array of short strings, each citing a specific given metric (e.g. "RSI at 28 indicates oversold conditions"),
-  "bearishSignals": array of short strings, each citing a specific given metric,
+  "bullishSignals": up to 5 short strings, each citing a specific given metric (e.g. "RSI at 28 indicates oversold conditions"),
+  "bearishSignals": up to 5 short strings, each citing a specific given metric,
   "technicalScore": integer from -100 (strongly bearish) to 100 (strongly bullish),
   "explanation": a 2-4 sentence plain-English synthesis referencing the specific calculated values you were given
 }
