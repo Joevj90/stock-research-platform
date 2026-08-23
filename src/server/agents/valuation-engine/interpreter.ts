@@ -9,7 +9,7 @@ import type {
   ValuationInterpretation,
   ValuationMetrics,
 } from "@/lib/valuation-types";
-import { parseAiJsonResponse } from "@/server/agents/shared/parse-ai-json";
+import { parseAiJsonResponse, AiJsonParseError } from "@/server/agents/shared/parse-ai-json";
 
 const log = logger.child("agents:valuation-engine:interpreter");
 
@@ -133,9 +133,26 @@ export async function interpretValuation(
     let parsedJson: unknown;
     try {
       parsedJson = parseAiJsonResponse(rawText);
-    } catch {
-      log.error("Failed to parse AI response as JSON", { rawText: rawText.slice(0, 500) });
-      return { ok: false, error: { code: "AI_PARSE_ERROR", message: "AI response was not valid JSON." } };
+    } catch (err) {
+      // TEMPORARY DIAGNOSTIC: surface a snippet of the problematic
+      // response so we can actually see what went wrong, instead of a
+      // bare message that gives no way to distinguish truncation from a
+      // real syntax problem. Safe to pare back once the root cause of
+      // repeated AI_PARSE_ERROR failures is confirmed.
+      const diag =
+        err instanceof AiJsonParseError
+          ? ` [diag: len=${err.rawTextLength}, start="${err.snippetStart.slice(0, 120)}", end="${err.snippetEnd.slice(-120)}"]`
+          : ``;
+      log.error("Failed to parse AI response as JSON", {
+        rawTextLength: rawText.length,
+        rawTextStart: rawText.slice(0, 300),
+        rawTextEnd: rawText.slice(-300),
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return {
+        ok: false,
+        error: { code: "AI_PARSE_ERROR", message: `AI response was not valid JSON.${diag}` },
+      };
     }
 
     const validation = InterpretationSchema.safeParse(parsedJson);

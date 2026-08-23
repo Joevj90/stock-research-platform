@@ -10,10 +10,24 @@
  * only if that fails, falls back to locating the outermost `{...}`
  * substring and parsing that. It never repairs or guesses at malformed
  * JSON *content* -- if the extracted substring still isn't valid JSON
- * (e.g. genuine truncation mid-object), this throws just like a plain
- * `JSON.parse` would, and the caller's existing AI_PARSE_ERROR handling
- * applies unchanged.
+ * (e.g. genuine truncation mid-object), this throws an `AiJsonParseError`
+ * carrying diagnostic detail (length, a snippet near the failure) so the
+ * caller can log/surface enough to actually diagnose the real cause,
+ * rather than a bare "invalid JSON" with no further information.
  */
+
+export class AiJsonParseError extends Error {
+  constructor(
+    message: string,
+    public readonly rawTextLength: number,
+    public readonly snippetStart: string,
+    public readonly snippetEnd: string
+  ) {
+    super(message);
+    this.name = "AiJsonParseError";
+  }
+}
+
 export function parseAiJsonResponse(rawText: string): unknown {
   const stripped = stripCodeFences(rawText);
 
@@ -26,11 +40,28 @@ export function parseAiJsonResponse(rawText: string): unknown {
   const firstBrace = stripped.indexOf("{");
   const lastBrace = stripped.lastIndexOf("}");
   if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
-    throw new Error("No JSON object found in AI response.");
+    throw new AiJsonParseError(
+      "No JSON object found in AI response.",
+      rawText.length,
+      rawText.slice(0, 200),
+      rawText.slice(-200)
+    );
   }
 
   const candidate = stripped.slice(firstBrace, lastBrace + 1);
-  return JSON.parse(candidate); // throws if genuinely malformed -- caller handles this
+  try {
+    return JSON.parse(candidate);
+  } catch (err) {
+    // Genuinely malformed/truncated -- carry diagnostic detail so the
+    // caller isn't stuck with a bare "invalid JSON" and no way to tell
+    // truncation apart from a real syntax problem.
+    throw new AiJsonParseError(
+      `${err instanceof Error ? err.message : "Unknown JSON parse error"}`,
+      rawText.length,
+      candidate.slice(0, 200),
+      candidate.slice(-200)
+    );
+  }
 }
 
 function stripCodeFences(text: string): string {

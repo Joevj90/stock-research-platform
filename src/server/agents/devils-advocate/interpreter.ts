@@ -6,7 +6,7 @@ import type { AnalysisSummaries } from "@/server/agents/shared/analysis-summarie
 import type { CommitteeInterpretation } from "@/lib/investment-committee-types";
 import type { ForecastInterpretation, ForecastHorizonKey } from "@/lib/forecast-types";
 import type { CommitteeReview, DevilsAdvocateInterpretation } from "@/lib/devils-advocate-types";
-import { parseAiJsonResponse } from "@/server/agents/shared/parse-ai-json";
+import { parseAiJsonResponse, AiJsonParseError } from "@/server/agents/shared/parse-ai-json";
 
 const log = logger.child("agents:devils-advocate:interpreter");
 
@@ -189,9 +189,26 @@ export async function interpretDevilsAdvocate(
     let parsedJson: unknown;
     try {
       parsedJson = parseAiJsonResponse(rawText);
-    } catch {
-      log.error("Failed to parse AI response as JSON", { rawText: rawText.slice(0, 500) });
-      return { ok: false, error: { code: "AI_PARSE_ERROR", message: "AI response was not valid JSON." } };
+    } catch (err) {
+      // TEMPORARY DIAGNOSTIC: surface a snippet of the problematic
+      // response so we can actually see what went wrong, instead of a
+      // bare message that gives no way to distinguish truncation from a
+      // real syntax problem. Safe to pare back once the root cause of
+      // repeated AI_PARSE_ERROR failures is confirmed.
+      const diag =
+        err instanceof AiJsonParseError
+          ? ` [diag: len=${err.rawTextLength}, start="${err.snippetStart.slice(0, 120)}", end="${err.snippetEnd.slice(-120)}"]`
+          : ``;
+      log.error("Failed to parse AI response as JSON", {
+        rawTextLength: rawText.length,
+        rawTextStart: rawText.slice(0, 300),
+        rawTextEnd: rawText.slice(-300),
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return {
+        ok: false,
+        error: { code: "AI_PARSE_ERROR", message: `AI response was not valid JSON.${diag}` },
+      };
     }
 
     const validation = ResponseSchema.safeParse(parsedJson);

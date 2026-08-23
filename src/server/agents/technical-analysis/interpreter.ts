@@ -3,7 +3,7 @@ import { env } from "@/server/config/env";
 import { logger } from "@/server/logger";
 import type { Result } from "@/lib/types";
 import type { CalculatedTechnicalMetrics, TechnicalInterpretation } from "./types";
-import { parseAiJsonResponse } from "@/server/agents/shared/parse-ai-json";
+import { parseAiJsonResponse, AiJsonParseError } from "@/server/agents/shared/parse-ai-json";
 
 const log = logger.child("agents:technical-analysis:interpreter");
 
@@ -116,11 +116,22 @@ export async function interpretTechnicalMetrics(
     let parsedJson: unknown;
     try {
       parsedJson = parseAiJsonResponse(rawText);
-    } catch {
-      log.error("Failed to parse AI response as JSON", { rawText: rawText.slice(0, 500) });
+    } catch (err) {
+      // TEMPORARY DIAGNOSTIC: see the identical comment in other
+      // interpreters' catch blocks for why this exists.
+      const diag =
+        err instanceof AiJsonParseError
+          ? ` [diag: len=${err.rawTextLength}, start="${err.snippetStart.slice(0, 120)}", end="${err.snippetEnd.slice(-120)}"]`
+          : ``;
+      log.error("Failed to parse AI response as JSON", {
+        rawTextLength: rawText.length,
+        rawTextStart: rawText.slice(0, 300),
+        rawTextEnd: rawText.slice(-300),
+        error: err instanceof Error ? err.message : String(err),
+      });
       return {
         ok: false,
-        error: { code: "AI_PARSE_ERROR", message: "AI response was not valid JSON." },
+        error: { code: "AI_PARSE_ERROR", message: `AI response was not valid JSON.${diag}` },
       };
     }
 
