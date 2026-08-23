@@ -73,8 +73,8 @@ export function DevilsAdvocatePanel({ ticker }: { ticker: string }) {
       {state.status === "idle" && (
         <p className="mt-3 text-xs text-gray-500">
           Actively looks for reasons the Investment Committee&apos;s conclusion could be wrong — not
-          automatically bearish, just genuinely skeptical. Requires the Committee&apos;s conclusion
-          already exists for this stock, so run that first if you haven&apos;t. This is the most
+          automatically bearish, just genuinely skeptical. This runs its own fresh Forecast and Investment
+          Committee analysis internally, so you don&apos;t need to run those first. This is the most
           demanding analysis in the app and can take several minutes to complete.
         </p>
       )}
