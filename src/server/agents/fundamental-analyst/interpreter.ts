@@ -3,6 +3,7 @@ import { env } from "@/server/config/env";
 import { logger } from "@/server/logger";
 import type { Result } from "@/lib/types";
 import type { CalculatedFundamentalMetrics, FundamentalAnalystInterpretation } from "@/lib/fundamental-analyst-types";
+import { parseAiJsonResponse } from "@/server/agents/shared/parse-ai-json";
 
 const log = logger.child("agents:fundamental-analyst:interpreter");
 
@@ -130,7 +131,7 @@ export async function interpretFundamentalMetrics(
 
     let parsedJson: unknown;
     try {
-      parsedJson = JSON.parse(stripCodeFences(rawText));
+      parsedJson = parseAiJsonResponse(rawText);
     } catch {
       log.error("Failed to parse AI response as JSON", { rawText: rawText.slice(0, 500) });
       return { ok: false, error: { code: "AI_PARSE_ERROR", message: "AI response was not valid JSON." } };
@@ -167,11 +168,6 @@ export async function interpretFundamentalMetrics(
   }
 }
 
-function stripCodeFences(text: string): string {
-  const trimmed = text.trim();
-  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
-  return fenced ? fenced[1]!.trim() : trimmed;
-}
 
 interface AnthropicMessageResponse {
   content?: { type: string; text?: string }[];

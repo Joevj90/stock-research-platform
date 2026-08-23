@@ -9,6 +9,7 @@ import type {
   PersonaEvaluation,
   CommitteeRecommendation,
 } from "@/lib/investment-committee-types";
+import { parseAiJsonResponse } from "@/server/agents/shared/parse-ai-json";
 
 const log = logger.child("agents:investment-committee:debate");
 
@@ -147,7 +148,7 @@ export async function interpretDebate(input: DebateInterpreterInput): Promise<Re
 
     let parsedJson: unknown;
     try {
-      parsedJson = JSON.parse(stripCodeFences(rawText));
+      parsedJson = parseAiJsonResponse(rawText);
     } catch {
       log.error("Failed to parse AI response as JSON", { rawText: rawText.slice(0, 500) });
       return { ok: false, error: { code: "AI_PARSE_ERROR", message: "AI response was not valid JSON." } };
@@ -175,11 +176,6 @@ export async function interpretDebate(input: DebateInterpreterInput): Promise<Re
   }
 }
 
-function stripCodeFences(text: string): string {
-  const trimmed = text.trim();
-  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
-  return fenced ? fenced[1]!.trim() : trimmed;
-}
 
 interface AnthropicMessageResponse {
   content?: { type: string; text?: string }[];

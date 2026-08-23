@@ -4,6 +4,7 @@ import { logger } from "@/server/logger";
 import type { Result } from "@/lib/types";
 import type { NewsEvent, WhatsHappeningSummary } from "@/lib/news-types";
 import type { FundamentalsSignal, MarketReactionSignal, SentimentInterpretation } from "@/lib/sentiment-types";
+import { parseAiJsonResponse } from "@/server/agents/shared/parse-ai-json";
 
 const log = logger.child("agents:sentiment-analysis:interpreter");
 
@@ -130,7 +131,7 @@ export async function interpretSentiment(
 
     let parsedJson: unknown;
     try {
-      parsedJson = JSON.parse(stripCodeFences(rawText));
+      parsedJson = parseAiJsonResponse(rawText);
     } catch {
       log.error("Failed to parse AI response as JSON", { rawText: rawText.slice(0, 500) });
       return { ok: false, error: { code: "AI_PARSE_ERROR", message: "AI response was not valid JSON." } };
@@ -167,11 +168,6 @@ export async function interpretSentiment(
   }
 }
 
-function stripCodeFences(text: string): string {
-  const trimmed = text.trim();
-  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
-  return fenced ? fenced[1]!.trim() : trimmed;
-}
 
 interface AnthropicMessageResponse {
   content?: { type: string; text?: string }[];

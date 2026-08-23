@@ -4,6 +4,7 @@ import { logger } from "@/server/logger";
 import type { Result } from "@/lib/types";
 import type { RiskFactorSignals, RiskInterpretation } from "@/lib/risk-types";
 import type { NewsEvent } from "@/lib/news-types";
+import { parseAiJsonResponse } from "@/server/agents/shared/parse-ai-json";
 
 const log = logger.child("agents:risk-analyst:interpreter");
 
@@ -134,7 +135,7 @@ export async function interpretRisk(input: RiskInterpreterInput): Promise<Result
 
     let parsedJson: unknown;
     try {
-      parsedJson = JSON.parse(stripCodeFences(rawText));
+      parsedJson = parseAiJsonResponse(rawText);
     } catch {
       log.error("Failed to parse AI response as JSON", { rawText: rawText.slice(0, 500) });
       return { ok: false, error: { code: "AI_PARSE_ERROR", message: "AI response was not valid JSON." } };
@@ -169,11 +170,6 @@ export async function interpretRisk(input: RiskInterpreterInput): Promise<Result
   }
 }
 
-function stripCodeFences(text: string): string {
-  const trimmed = text.trim();
-  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
-  return fenced ? fenced[1]!.trim() : trimmed;
-}
 
 interface AnthropicMessageResponse {
   content?: { type: string; text?: string }[];

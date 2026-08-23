@@ -3,6 +3,7 @@ import { env } from "@/server/config/env";
 import { logger } from "@/server/logger";
 import type { Result } from "@/lib/types";
 import type { CalculatedTechnicalMetrics, TechnicalInterpretation } from "./types";
+import { parseAiJsonResponse } from "@/server/agents/shared/parse-ai-json";
 
 const log = logger.child("agents:technical-analysis:interpreter");
 
@@ -114,7 +115,7 @@ export async function interpretTechnicalMetrics(
 
     let parsedJson: unknown;
     try {
-      parsedJson = JSON.parse(stripCodeFences(rawText));
+      parsedJson = parseAiJsonResponse(rawText);
     } catch {
       log.error("Failed to parse AI response as JSON", { rawText: rawText.slice(0, 500) });
       return {
@@ -157,11 +158,6 @@ export async function interpretTechnicalMetrics(
   }
 }
 
-function stripCodeFences(text: string): string {
-  const trimmed = text.trim();
-  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
-  return fenced ? fenced[1]!.trim() : trimmed;
-}
 
 interface AnthropicMessageResponse {
   content?: { type: string; text?: string }[];
