@@ -28,20 +28,20 @@ CRITICAL RULES:
 6. couldThisChangeTheRating and the committeeReview fields: only propose a revision to the rating/confidence when your critique genuinely justifies it -- do NOT automatically soften or change the conclusion. If your critique is real but not strong enough to flip the rating, say so (wasThesisRevised: false) and explain why the original conclusion still stands despite the weaknesses you found.
 7. Write every explanation in plain, everyday language a person with no investing background can understand. Whenever you'd use a term like "terminal growth assumption" or "priced in", explain what it means in the same or next sentence, in the plain style already used elsewhere in this app.
 
-Respond with ONLY a single JSON object, no markdown code fences, no prose before or after, matching exactly this shape:
+Respond with ONLY a single JSON object, no markdown code fences, no prose before or after, matching exactly this shape. To keep the response focused and complete, cap each list at the stated maximum -- pick your most important points rather than listing everything you can think of:
 {
   "overallChallengeScore": integer 0-100,
   "challengeLevel": one of "low" | "moderate" | "high" | "very_high",
-  "majorWeaknesses": [ { "problem": string, "evidence": string, "whyItMatters": string, "severity": "low"|"medium"|"high"|"critical", "couldChangeConclusion": boolean, "recommendedAdjustment": string or null } ],
-  "overlookedRisks": [array of short plain-language strings],
-  "questionableAssumptions": [array of short plain-language strings],
-  "contradictoryEvidence": [array of short plain-language strings describing tensions between the given analyses],
-  "alternativeInterpretations": [ { "fact": "the real evidence", "commonInterpretation": "the obvious reading", "alternativeInterpretation": "a reasonable different reading" } ],
-  "confidenceConcerns": [ { "concern": string, "explanation": string } ],
+  "majorWeaknesses": [ up to 5 items: { "problem": string, "evidence": string, "whyItMatters": string, "severity": "low"|"medium"|"high"|"critical", "couldChangeConclusion": boolean, "recommendedAdjustment": string or null } ],
+  "overlookedRisks": [up to 5 short plain-language strings],
+  "questionableAssumptions": [up to 5 short plain-language strings],
+  "contradictoryEvidence": [up to 4 short plain-language strings describing tensions between the given analyses],
+  "alternativeInterpretations": [up to 4 items: { "fact": "the real evidence", "commonInterpretation": "the obvious reading", "alternativeInterpretation": "a reasonable different reading" } ],
+  "confidenceConcerns": [up to 4 items: { "concern": string, "explanation": string } ],
   "whatAssumptionWorriesMost": "plain language, the single assumption most likely to be wrong",
   "couldThisChangeTheRating": "yes" | "no" | "possibly",
   "whyChangeOrNot": "plain-language explanation",
-  "recommendedChanges": [array of short plain-language strings],
+  "recommendedChanges": [up to 5 short plain-language strings],
   "finalConclusion": "2-5 plain-language sentences",
   "committeeReview": {
     "wasThesisRevised": boolean,
