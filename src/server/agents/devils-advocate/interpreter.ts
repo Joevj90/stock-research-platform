@@ -160,7 +160,7 @@ export async function interpretDevilsAdvocate(
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 6144,
+        max_tokens: 8192, // raised -- this has the most complex output schema in the app (weaknesses, overlooked risks, assumptions, contradictions, alternative interpretations, confidence concerns, plus the committee review)
         system: SYSTEM_PROMPT,
         messages: [{ role: "user", content: JSON.stringify(input) }],
       }),
