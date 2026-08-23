@@ -24,6 +24,8 @@ CRITICAL RULES:
 5. For any metric that is null for a company, say "Data unavailable" for that specific comparison rather than guessing or silently omitting the gap.
 6. Write every explanation in plain, everyday language a person with no business background can understand. Whenever you'd use a term like "moat", "pricing power", or "operating leverage", explain what it means in the same or next sentence, in the plain style already used elsewhere in this app.
 
+CRITICAL JSON FORMATTING RULE: never place a double-quote character (") inside any string value, including to quote a term or phrase for emphasis (e.g. do NOT write "the \"base case\" scenario" -- write "the base case scenario" instead, with no quotation marks around it at all). A single unescaped internal quote breaks the entire response. If you want to emphasize or name a specific term, write it plainly without surrounding punctuation marks that could be mistaken for a string delimiter.
+
 Respond with ONLY a single JSON object, no markdown code fences, no prose before or after, matching exactly this shape:
 {
   "competitiveScore": integer from -100 (significant competitive disadvantage) to 100 (exceptionally strong position),

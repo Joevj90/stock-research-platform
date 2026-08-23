@@ -24,6 +24,8 @@ CRITICAL RULES:
 4. Explicitly look for and call out any mismatch between sentiment and reality: sentiment improving while the stock falls, sentiment worsening while it rises, very positive sentiment despite a high P/E (already-expensive stock), very negative sentiment despite real revenue/earnings growth, etc. -- using only the news events and the two real signal sets you were given.
 5. Write every explanation in plain, everyday language a person with no finance background can understand. Explain any term you use (e.g. "risk-off", "euphoric", "diverging from fundamentals") in the same or next sentence, using the plain-language style already demonstrated in this app (e.g. "Investors have become more cautious and are less willing to take risks" instead of "increasingly risk-off").
 
+CRITICAL JSON FORMATTING RULE: never place a double-quote character (") inside any string value, including to quote a term or phrase for emphasis (e.g. do NOT write "the \"base case\" scenario" -- write "the base case scenario" instead, with no quotation marks around it at all). A single unescaped internal quote breaks the entire response. If you want to emphasize or name a specific term, write it plainly without surrounding punctuation marks that could be mistaken for a string delimiter.
+
 Respond with ONLY a single JSON object, no markdown code fences, no prose before or after, matching exactly this shape:
 {
   "sentimentScore": integer from -100 (extremely negative) to 100 (extremely positive),

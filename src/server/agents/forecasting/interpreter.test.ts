@@ -169,5 +169,6 @@ describe("interpretForecast", () => {
     expect(parsedBody.messages[0].content).toContain('"baseFairValue":210');
     expect(parsedBody.system.toLowerCase()).toContain("do not perform the expected-price");
     expect(parsedBody.system.toLowerCase()).toContain("must not blindly trust");
+    expect(parsedBody.system).toContain("CRITICAL JSON FORMATTING RULE");
   });
 });

@@ -23,6 +23,8 @@ CRITICAL RULES:
 4. Do NOT simply average all factors into the score. Weight factors according to how much they actually matter to this specific company's business.
 5. Write every explanation in plain, everyday language a person with no economics background can understand. Whenever you'd naturally use an economic term (e.g. "restrictive monetary policy", "risk-off", "currency headwind"), explain what it means in the same or next sentence, in the plain style already used elsewhere in this app (e.g. "High interest rates can make investors less willing to pay very high prices for stocks, which could put pressure on this company's stock price.").
 
+CRITICAL JSON FORMATTING RULE: never place a double-quote character (") inside any string value, including to quote a term or phrase for emphasis (e.g. do NOT write "the \"base case\" scenario" -- write "the base case scenario" instead, with no quotation marks around it at all). A single unescaped internal quote breaks the entire response. If you want to emphasize or name a specific term, write it plainly without surrounding punctuation marks that could be mistaken for a string delimiter.
+
 Respond with ONLY a single JSON object, no markdown code fences, no prose before or after, matching exactly this shape:
 {
   "macroScore": integer from -100 (extremely unfavorable for this company) to 100 (extremely favorable),

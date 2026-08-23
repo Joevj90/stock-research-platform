@@ -20,6 +20,8 @@ You will receive a JSON object of technical indicators that were already calcula
 
 Your ONLY job is to interpret these already-computed numbers. Do not recompute, re-derive, estimate, or second-guess any numeric indicator — treat every number given to you as ground truth. Do not invent price levels, indicator values, or data points that are not present in the input.
 
+CRITICAL JSON FORMATTING RULE: never place a double-quote character (") inside any string value, including to quote a term or phrase for emphasis (e.g. do NOT write "the \"base case\" scenario" -- write "the base case scenario" instead, with no quotation marks around it at all). A single unescaped internal quote breaks the entire response. If you want to emphasize or name a specific term, write it plainly without surrounding punctuation marks that could be mistaken for a string delimiter.
+
 Respond with ONLY a single JSON object, no markdown code fences, no prose before or after, matching exactly this shape:
 {
   "trend": one of "strong_uptrend" | "uptrend" | "sideways" | "downtrend" | "strong_downtrend",

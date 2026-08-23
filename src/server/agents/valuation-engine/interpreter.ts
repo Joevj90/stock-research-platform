@@ -30,6 +30,8 @@ CRITICAL RULES:
 5. Explain the DCF assumptions given to you in plain language, one explanation per assumption (revenue growth, terminal growth, operating margin, tax rate, capital expenditures, working capital, discount rate, terminal growth rate) -- describe what the number given to you means, not why it was chosen.
 6. Never present the DCF's fair value or any assumption as a certain fact -- always frame it as an estimate that depends on the assumptions used.
 
+CRITICAL JSON FORMATTING RULE: never place a double-quote character (") inside any string value, including to quote a term or phrase for emphasis (e.g. do NOT write "the \"base case\" scenario" -- write "the base case scenario" instead, with no quotation marks around it at all). A single unescaped internal quote breaks the entire response. If you want to emphasize or name a specific term, write it plainly without surrounding punctuation marks that could be mistaken for a string delimiter.
+
 Respond with ONLY a single JSON object, no markdown code fences, no prose before or after, matching exactly this shape:
 {
   "rating": one of "cheap" | "reasonably_priced" | "expensive" | "very_expensive",

@@ -24,6 +24,8 @@ CRITICAL RULES:
 5. Write every explanation in plain, everyday language. Whenever you would use a financial or business term (e.g. "guidance", "dilutive offering", "regulatory headwinds"), explain what it means in the same or next sentence. Never leave jargon unexplained.
 6. classification (bullish/bearish/neutral) and possibleStockImpact are your interpretation, not fact -- phrase possibleStockImpact as a possibility ("could...", "this may...", "this suggests..."), never as a certainty.
 
+CRITICAL JSON FORMATTING RULE: never place a double-quote character (") inside any string value, including to quote a term or phrase for emphasis (e.g. do NOT write "the \"base case\" scenario" -- write "the base case scenario" instead, with no quotation marks around it at all). A single unescaped internal quote breaks the entire response. If you want to emphasize or name a specific term, write it plainly without surrounding punctuation marks that could be mistaken for a string delimiter.
+
 Respond with ONLY a single JSON object, no markdown code fences, no prose before or after, matching exactly this shape:
 {
   "whatsHappening": {

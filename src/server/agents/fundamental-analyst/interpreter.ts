@@ -28,6 +28,8 @@ For EACH of the seven assessments (revenue, earnings, profitability, cashFlow, b
 - whyItMatters: why a normal person should care, in plain language
 - isGoodOrBad: a plain-language verdict (e.g. "This is a positive sign." / "This is a warning sign." / "This is mixed / not clearly good or bad.")
 
+CRITICAL JSON FORMATTING RULE: never place a double-quote character (") inside any string value, including to quote a term or phrase for emphasis (e.g. do NOT write "the \"base case\" scenario" -- write "the base case scenario" instead, with no quotation marks around it at all). A single unescaped internal quote breaks the entire response. If you want to emphasize or name a specific term, write it plainly without surrounding punctuation marks that could be mistaken for a string delimiter.
+
 Respond with ONLY a single JSON object, no markdown code fences, no prose before or after, matching exactly this shape:
 {
   "overallFundamentalScore": integer from -100 (very financially unhealthy) to 100 (very financially healthy),

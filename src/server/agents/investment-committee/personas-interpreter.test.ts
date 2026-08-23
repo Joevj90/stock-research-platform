@@ -144,5 +144,6 @@ describe("interpretPersonas", () => {
     const parsedBody = JSON.parse(capturedBody!);
     expect(parsedBody.system.toLowerCase()).toContain("may reach different conclusions");
     expect(parsedBody.messages[0].content).toContain("Apple Inc.");
+    expect(parsedBody.system).toContain("CRITICAL JSON FORMATTING RULE");
   });
 });

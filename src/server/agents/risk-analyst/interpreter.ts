@@ -25,6 +25,8 @@ CRITICAL RULES:
 5. Do NOT simply average risks into the overall score -- weight by probability, potential damage, relevance to this company, and time horizon.
 6. Write every explanation in plain, everyday language a person with no investing background can understand. Whenever you'd use a term like "multiple compression", "customer concentration", or "balance-sheet leverage", explain what it means in the same or next sentence, in the plain style already used elsewhere in this app.
 
+CRITICAL JSON FORMATTING RULE: never place a double-quote character (") inside any string value, including to quote a term or phrase for emphasis (e.g. do NOT write "the \"base case\" scenario" -- write "the base case scenario" instead, with no quotation marks around it at all). A single unescaped internal quote breaks the entire response. If you want to emphasize or name a specific term, write it plainly without surrounding punctuation marks that could be mistaken for a string delimiter.
+
 Respond with ONLY a single JSON object, no markdown code fences, no prose before or after, matching exactly this shape:
 {
   "riskScore": integer from 0 (very low overall risk) to 100 (extremely high overall risk),
