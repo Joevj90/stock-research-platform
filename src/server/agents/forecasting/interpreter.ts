@@ -4,11 +4,10 @@ import { logger } from "@/server/logger";
 import type { Result } from "@/lib/types";
 import type { AnalysisSummaries } from "@/server/agents/shared/analysis-summaries";
 import { parseAiJsonResponse, AiJsonParseError } from "@/server/agents/shared/parse-ai-json";
+import { callAnthropicForText } from "@/server/agents/shared/call-anthropic";
 
 const log = logger.child("agents:forecasting:interpreter");
 
-const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
-const ANTHROPIC_VERSION = "2023-06-01";
 const MODEL = "claude-sonnet-5";
 const FETCH_TIMEOUT_MS = 90_000; // raised now that Vercel Pro allows much longer function execution
 
@@ -129,44 +128,15 @@ export async function interpretForecast(
     };
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-
-  try {
-    const res = await fetch(ANTHROPIC_API_URL, {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": env.ANTHROPIC_API_KEY,
-        "anthropic-version": ANTHROPIC_VERSION,
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 8192,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content: JSON.stringify(input) }],
-      }),
-    });
-
-    if (res.status === 401 || res.status === 403) {
-      log.error("Anthropic API authentication failed", { status: res.status });
-      return { ok: false, error: { code: "AI_AUTH_ERROR", message: "AI provider rejected the API key." } };
-    }
-    if (res.status === 429) {
-      return { ok: false, error: { code: "AI_RATE_LIMITED", message: "AI provider rate limit exceeded." } };
-    }
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      log.error("Anthropic API request failed", { status: res.status, body: body.slice(0, 500) });
-      return { ok: false, error: { code: "AI_PROVIDER_ERROR", message: `AI provider returned ${res.status}.` } };
-    }
-
-    const json = (await res.json()) as AnthropicMessageResponse;
-    const rawText = json.content?.find((b) => b.type === "text")?.text;
-    if (!rawText) {
-      return { ok: false, error: { code: "AI_PARSE_ERROR", message: "AI response contained no text content." } };
-    }
+  const callResult = await callAnthropicForText({
+    model: MODEL,
+    systemPrompt: SYSTEM_PROMPT,
+    userContent: JSON.stringify(input),
+    maxTokens: 8192,
+    timeoutMs: FETCH_TIMEOUT_MS,
+  });
+  if (!callResult.ok) return callResult;
+  const rawText = callResult.data;
 
     let parsedJson: unknown;
     try {
@@ -211,22 +181,4 @@ export async function interpretForecast(
     };
 
     return { ok: true, data: interpretation };
-  } catch (err) {
-    const isAbort = err instanceof Error && err.name === "AbortError";
-    log.error("Anthropic API request threw", { error: err instanceof Error ? err.message : String(err) });
-    return {
-      ok: false,
-      error: {
-        code: isAbort ? "AI_TIMEOUT" : "AI_UNREACHABLE",
-        message: isAbort ? "AI provider timed out." : "Could not reach the AI provider.",
-      },
-    };
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-
-interface AnthropicMessageResponse {
-  content?: { type: string; text?: string }[];
 }

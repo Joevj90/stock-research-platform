@@ -4,11 +4,10 @@ import { logger } from "@/server/logger";
 import type { Result } from "@/lib/types";
 import type { CalculatedTechnicalMetrics, TechnicalInterpretation } from "./types";
 import { parseAiJsonResponse, AiJsonParseError } from "@/server/agents/shared/parse-ai-json";
+import { callAnthropicForText } from "@/server/agents/shared/call-anthropic";
 
 const log = logger.child("agents:technical-analysis:interpreter");
 
-const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
-const ANTHROPIC_VERSION = "2023-06-01";
 // Balanced default model for a moderate-complexity structured-interpretation
 // task — see the chat writeup for why this model was chosen.
 const MODEL = "claude-sonnet-5";
@@ -64,114 +63,55 @@ export async function interpretTechnicalMetrics(
     };
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const callResult = await callAnthropicForText({
+    model: MODEL,
+    systemPrompt: SYSTEM_PROMPT,
+    userContent: JSON.stringify(metrics),
+    maxTokens: 2048,
+    timeoutMs: FETCH_TIMEOUT_MS,
+  });
+  if (!callResult.ok) return callResult;
+  const rawText = callResult.data;
 
+  let parsedJson: unknown;
   try {
-    const res = await fetch(ANTHROPIC_API_URL, {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": env.ANTHROPIC_API_KEY,
-        "anthropic-version": ANTHROPIC_VERSION,
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 2048,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content: JSON.stringify(metrics) }],
-      }),
-    });
-
-    if (res.status === 401 || res.status === 403) {
-      log.error("Anthropic API authentication failed", { status: res.status });
-      return {
-        ok: false,
-        error: { code: "AI_AUTH_ERROR", message: "AI provider rejected the API key." },
-      };
-    }
-    if (res.status === 429) {
-      return {
-        ok: false,
-        error: { code: "AI_RATE_LIMITED", message: "AI provider rate limit exceeded." },
-      };
-    }
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      log.error("Anthropic API request failed", { status: res.status, body: body.slice(0, 500) });
-      return {
-        ok: false,
-        error: { code: "AI_PROVIDER_ERROR", message: `AI provider returned ${res.status}.` },
-      };
-    }
-
-    const json = (await res.json()) as AnthropicMessageResponse;
-    const rawText = json.content?.find((b) => b.type === "text")?.text;
-    if (!rawText) {
-      return {
-        ok: false,
-        error: { code: "AI_PARSE_ERROR", message: "AI response contained no text content." },
-      };
-    }
-
-    let parsedJson: unknown;
-    try {
-      parsedJson = parseAiJsonResponse(rawText);
-    } catch (err) {
-      // TEMPORARY DIAGNOSTIC: see the identical comment in other
-      // interpreters' catch blocks for why this exists.
-      const diag =
-        err instanceof AiJsonParseError
-          ? ` [diag: ${err.message}${err.snippetAtFailure ? ` | at failure: ...${err.snippetAtFailure}...` : ` | start: "${err.snippetStart.slice(0, 100)}" end: "${err.snippetEnd.slice(-100)}"`}]`
-          : ``;
-      log.error("Failed to parse AI response as JSON", {
-        rawTextLength: rawText.length,
-        rawTextStart: rawText.slice(0, 300),
-        rawTextEnd: rawText.slice(-300),
-        error: err instanceof Error ? err.message : String(err),
-      });
-      return {
-        ok: false,
-        error: { code: "AI_PARSE_ERROR", message: `AI response was not valid JSON.${diag}` },
-      };
-    }
-
-    const validation = InterpretationSchema.safeParse(parsedJson);
-    if (!validation.success) {
-      log.error("AI response failed schema validation", {
-        issues: validation.error.issues.map((i) => i.message),
-      });
-      return {
-        ok: false,
-        error: { code: "AI_PARSE_ERROR", message: "AI response did not match the required schema." },
-      };
-    }
-
-    const interpretation: TechnicalInterpretation = {
-      source: "ai",
-      model: MODEL,
-      generatedAt: new Date().toISOString(),
-      ...validation.data,
-    };
-
-    return { ok: true, data: interpretation };
+    parsedJson = parseAiJsonResponse(rawText);
   } catch (err) {
-    const isAbort = err instanceof Error && err.name === "AbortError";
-    log.error("Anthropic API request threw", { error: err instanceof Error ? err.message : String(err) });
+    // TEMPORARY DIAGNOSTIC: see the identical comment in other
+    // interpreters' catch blocks for why this exists.
+    const diag =
+      err instanceof AiJsonParseError
+        ? ` [diag: ${err.message}${err.snippetAtFailure ? ` | at failure: ...${err.snippetAtFailure}...` : ` | start: "${err.snippetStart.slice(0, 100)}" end: "${err.snippetEnd.slice(-100)}"`}]`
+        : ``;
+    log.error("Failed to parse AI response as JSON", {
+      rawTextLength: rawText.length,
+      rawTextStart: rawText.slice(0, 300),
+      rawTextEnd: rawText.slice(-300),
+      error: err instanceof Error ? err.message : String(err),
+    });
     return {
       ok: false,
-      error: {
-        code: isAbort ? "AI_TIMEOUT" : "AI_UNREACHABLE",
-        message: isAbort ? "AI provider timed out." : "Could not reach the AI provider.",
-      },
+      error: { code: "AI_PARSE_ERROR", message: `AI response was not valid JSON.${diag}` },
     };
-  } finally {
-    clearTimeout(timeout);
   }
-}
 
+  const validation = InterpretationSchema.safeParse(parsedJson);
+  if (!validation.success) {
+    log.error("AI response failed schema validation", {
+      issues: validation.error.issues.map((i) => i.message),
+    });
+    return {
+      ok: false,
+      error: { code: "AI_PARSE_ERROR", message: "AI response did not match the required schema." },
+    };
+  }
 
-interface AnthropicMessageResponse {
-  content?: { type: string; text?: string }[];
+  const interpretation: TechnicalInterpretation = {
+    source: "ai",
+    model: MODEL,
+    generatedAt: new Date().toISOString(),
+    ...validation.data,
+  };
+
+  return { ok: true, data: interpretation };
 }
