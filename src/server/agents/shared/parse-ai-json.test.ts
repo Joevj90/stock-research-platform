@@ -151,4 +151,10 @@ describe("parseAiJsonResponse", () => {
     const result = parseAiJsonResponse(input);
     expect(result).toEqual({ a: 'the "quoted" term', b: [1, 2] });
   });
+
+  it("repairs an internal quoted phrase that sits immediately before the string's real closing quote (back-to-back quotes -- the edge case a simple lookahead heuristic couldn't reliably disambiguate)", () => {
+    const input = '{"explanation": "This is the "base case""}';
+    const result = parseAiJsonResponse(input);
+    expect(result).toEqual({ explanation: 'This is the "base case"' });
+  });
 });

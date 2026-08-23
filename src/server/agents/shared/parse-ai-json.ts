@@ -1,3 +1,5 @@
+import { jsonrepair } from "jsonrepair";
+
 /**
  * Robustly extracts a JSON object from a raw AI text response.
  *
@@ -8,15 +10,18 @@
  * raw text fails in exactly those cases even though the actual JSON
  * payload is intact -- this function tries the strict parse first, then
  * falls back to locating the outermost `{...}` substring, then finally
- * to a targeted structural repair (`repairCommonJsonIssues`) for the
- * specific syntax slips this app has actually observed in production
- * (an unescaped quote used for emphasis, a trailing comma before a
- * closing brace/bracket). It never guesses at JSON *content* -- if
- * nothing produces valid JSON (e.g. genuine truncation mid-object), this
- * throws an `AiJsonParseError` carrying diagnostic detail (length, a
- * snippet near the failure) so the caller can log/surface enough to
- * actually diagnose the real cause, rather than a bare "invalid JSON"
- * with no further information.
+ * to `jsonrepair` (a mature, purpose-built library for exactly this
+ * problem -- repairing LLM-generated JSON: unescaped quotes, trailing
+ * commas, and more, using a real parser rather than a hand-rolled
+ * lookahead heuristic that had provable edge cases -- e.g. a quoted
+ * phrase sitting immediately before a string's real closing quote,
+ * producing back-to-back `""` that a simple next-character check
+ * couldn't reliably disambiguate). It never guesses at JSON *content* --
+ * if nothing produces valid, parseable JSON (e.g. genuine truncation
+ * mid-object), this throws an `AiJsonParseError` carrying diagnostic
+ * detail (length, a snippet near the failure) so the caller can
+ * log/surface enough to actually diagnose the real cause, rather than a
+ * bare "invalid JSON" with no further information.
  */
 
 export class AiJsonParseError extends Error {
@@ -64,19 +69,16 @@ export function parseAiJsonResponse(rawText: string): unknown {
     // Fall through to the repair pass below.
   }
 
-  // Last resort: models occasionally produce two specific, well-understood
-  // syntax slips that break otherwise-intact JSON:
-  //   (1) a quoted phrase for emphasis inside a string value (e.g. the
-  //       "base case" scenario) without escaping the inner quotes, and
-  //   (2) a trailing comma before a closing `}`/`]` -- valid in
-  //       JavaScript object/array literals, never valid in strict JSON.
-  // Both are repaired in a single structural pass, NOT a guess at
-  // content -- the result is always re-validated by a real JSON.parse
-  // before being trusted. If the repair doesn't produce valid JSON, this
-  // falls through to the same honest failure as before -- it never
+  // Last resort: hand off to jsonrepair, a mature library purpose-built
+  // for repairing exactly this class of problem. It handles unescaped
+  // quotes, trailing commas, missing quotes, and more, using a real
+  // parser -- far more reliable than a hand-rolled heuristic. The result
+  // is always re-validated by a real JSON.parse before being trusted; if
+  // jsonrepair itself can't produce valid JSON (e.g. genuine truncation),
+  // this falls through to the same honest failure as before -- it never
   // silently returns corrupted data.
   try {
-    return JSON.parse(repairCommonJsonIssues(candidate));
+    return JSON.parse(jsonrepair(candidate));
   } catch (err) {
     // Genuinely malformed/truncated -- carry diagnostic detail so the
     // caller isn't stuck with a bare "invalid JSON" and no way to tell
@@ -94,84 +96,6 @@ export function parseAiJsonResponse(rawText: string): unknown {
       snippetAtFailure
     );
   }
-}
-
-/**
- * Repairs two specific, well-understood JSON syntax issues in a single
- * forward pass that tracks whether we're currently inside a string:
- *
- *   1. A `"` encountered while inside a string is only treated as the
- *      real closing quote if the next non-whitespace character is a
- *      plausible JSON structural character (`:`, `,`, `}`, `]`, or end of
- *      text) -- otherwise it's an internal quote (e.g. a quoted phrase
- *      used for emphasis) and gets escaped, and scanning continues
- *      looking for the real closing quote.
- *   2. A `,` encountered OUTSIDE a string, when the next non-whitespace
- *      character is `}` or `]`, is a trailing comma -- always invalid in
- *      strict JSON regardless of context, so it's simply omitted.
- *
- * Already-escaped characters (`\"`, `\n`, etc.) are preserved as-is.
- * This is deliberately narrow: it only fires on the two specific
- * patterns this app has actually observed in production, and the caller
- * always re-validates the result with a real JSON.parse rather than
- * trusting this heuristic on its own.
- */
-function repairCommonJsonIssues(text: string): string {
-  let result = "";
-  let inString = false;
-
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i]!;
-
-    if (char === "\\" && i + 1 < text.length) {
-      // Preserve any escape sequence as-is (e.g. \", \n, \\) without
-      // reinterpreting the character after the backslash.
-      result += char + text[i + 1];
-      i++;
-      continue;
-    }
-
-    if (char === '"') {
-      if (!inString) {
-        inString = true;
-        result += char;
-        continue;
-      }
-
-      // We're inside a string and hit an unescaped quote -- check
-      // whether what follows (skipping whitespace) looks like a real
-      // JSON structural transition. If so, this is the legitimate
-      // closing quote; otherwise it's an internal quote to escape.
-      const next = nextNonWhitespace(text, i + 1);
-      const looksLikeRealClose = next === undefined || [":", ",", "}", "]"].includes(next);
-
-      if (looksLikeRealClose) {
-        inString = false;
-        result += char;
-      } else {
-        result += '\\"';
-      }
-      continue;
-    }
-
-    if (char === "," && !inString) {
-      const next = nextNonWhitespace(text, i + 1);
-      if (next === "}" || next === "]") {
-        // Trailing comma -- omit it entirely rather than copying it through.
-        continue;
-      }
-    }
-
-    result += char;
-  }
-
-  return result;
-}
-
-function nextNonWhitespace(text: string, fromIndex: number): string | undefined {
-  let j = fromIndex;
-  while (j < text.length && /\s/.test(text[j]!)) j++;
-  return text[j];
 }
 
 /** Node/V8's JSON.parse SyntaxError messages typically include either
