@@ -121,7 +121,7 @@ export async function interpretTechnicalMetrics(
       // interpreters' catch blocks for why this exists.
       const diag =
         err instanceof AiJsonParseError
-          ? ` [diag: len=${err.rawTextLength}, start="${err.snippetStart.slice(0, 120)}", end="${err.snippetEnd.slice(-120)}"]`
+          ? ` [diag: ${err.message}${err.snippetAtFailure ? ` | at failure: ...${err.snippetAtFailure}...` : ` | start: "${err.snippetStart.slice(0, 100)}" end: "${err.snippetEnd.slice(-100)}"`}]`
           : ``;
       log.error("Failed to parse AI response as JSON", {
         rawTextLength: rawText.length,

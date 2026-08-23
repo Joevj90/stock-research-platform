@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseAiJsonResponse } from "./parse-ai-json";
+import { parseAiJsonResponse, AiJsonParseError } from "./parse-ai-json";
 
 describe("parseAiJsonResponse", () => {
   it("parses clean, unwrapped JSON directly", () => {
@@ -40,6 +40,19 @@ describe("parseAiJsonResponse", () => {
 
   it("still throws for genuinely malformed/truncated JSON, rather than silently returning something wrong", () => {
     expect(() => parseAiJsonResponse('{"a": 1, "b": [1, 2, ')).toThrow();
+  });
+
+  it("throws an AiJsonParseError carrying a snippet centered on the failure position for a mid-string syntax error", () => {
+    // An unescaped quote inside a string value -- a real-world failure mode.
+    const input = '{"a": "text with an "unescaped" quote inside", "b": 2}';
+    try {
+      parseAiJsonResponse(input);
+      expect.unreachable("should have thrown");
+    } catch (err) {
+      expect(err).toBeInstanceOf(AiJsonParseError);
+      const parseErr = err as AiJsonParseError;
+      expect(parseErr.rawTextLength).toBe(input.length);
+    }
   });
 
   it("throws when no JSON object is present at all", () => {

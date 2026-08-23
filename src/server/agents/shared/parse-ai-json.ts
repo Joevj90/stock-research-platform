@@ -21,7 +21,13 @@ export class AiJsonParseError extends Error {
     message: string,
     public readonly rawTextLength: number,
     public readonly snippetStart: string,
-    public readonly snippetEnd: string
+    public readonly snippetEnd: string,
+    /** A window of text centered on the exact character position where
+     * JSON.parse's native error reported the problem, when that position
+     * could be determined from the error message. Far more targeted than
+     * generic start/end snippets for pinpointing a mid-string syntax
+     * issue (e.g. an unescaped quote inside a text field). */
+    public readonly snippetAtFailure: string | null = null
   ) {
     super(message);
     this.name = "AiJsonParseError";
@@ -54,14 +60,29 @@ export function parseAiJsonResponse(rawText: string): unknown {
   } catch (err) {
     // Genuinely malformed/truncated -- carry diagnostic detail so the
     // caller isn't stuck with a bare "invalid JSON" and no way to tell
-    // truncation apart from a real syntax problem.
+    // truncation apart from a real mid-string syntax problem.
+    const errorMessage = err instanceof Error ? err.message : "Unknown JSON parse error";
+    const position = extractErrorPosition(errorMessage);
+    const snippetAtFailure =
+      position !== null ? candidate.slice(Math.max(0, position - 150), position + 150) : null;
+
     throw new AiJsonParseError(
-      `${err instanceof Error ? err.message : "Unknown JSON parse error"}`,
+      errorMessage,
       rawText.length,
       candidate.slice(0, 200),
-      candidate.slice(-200)
+      candidate.slice(-200),
+      snippetAtFailure
     );
   }
+}
+
+/** Node/V8's JSON.parse SyntaxError messages typically include either
+ * "at position N" or "line X column Y" -- this extracts a character
+ * offset from either form when present. */
+function extractErrorPosition(errorMessage: string): number | null {
+  const positionMatch = errorMessage.match(/position (\d+)/);
+  if (positionMatch) return Number(positionMatch[1]);
+  return null;
 }
 
 function stripCodeFences(text: string): string {
