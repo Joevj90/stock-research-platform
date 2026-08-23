@@ -6,7 +6,7 @@ import { logger } from "@/server/logger";
 // Depends on up to 8 other agents plus its own synthesis call -- raise
 // Vercel's function timeout to its Hobby-plan maximum so the platform
 // doesn't cut the request off early.
-export const maxDuration = 60;
+export const maxDuration = 240; // Vercel Pro allows up to 300s -- bounded by the slowest of up to 8 parallel agents plus its own call
 
 const log = logger.child("api:forecast");
 

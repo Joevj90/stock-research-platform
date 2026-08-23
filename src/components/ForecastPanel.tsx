@@ -51,10 +51,7 @@ export function ForecastPanel({ ticker }: { ticker: string }) {
     } catch {
       setState({
         status: "error",
-        message:
-          "This took too long to finish, likely due to a hosting time limit — this depends on up to 8 " +
-          "other analyses plus its own synthesis call. A paid hosting tier resolves this. Try again in " +
-          "the meantime; it sometimes finishes within the limit.",
+        message: "This took too long to finish. It depends on up to 8 other analyses — try again; it can take a few minutes.",
       });
     }
   }

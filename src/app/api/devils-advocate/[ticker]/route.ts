@@ -8,7 +8,7 @@ import { logger } from "@/server/logger";
 // function timeout to its Hobby-plan maximum so the platform itself
 // doesn't cut the request off before the AI calls can finish. If you're
 // on Vercel Pro or higher, you can raise this further (up to 300).
-export const maxDuration = 60;
+export const maxDuration = 300; // Vercel Pro allows up to 300s -- this is the deepest chain in the app
 
 const log = logger.child("api:devils-advocate");
 

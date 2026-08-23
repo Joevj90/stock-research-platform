@@ -54,10 +54,7 @@ export function SentimentPanel({ ticker }: { ticker: string }) {
     } catch {
       setState({
         status: "error",
-        message:
-          "This took too long to finish, likely due to a hosting time limit — this combines two AI steps " +
-          "(news analysis, then sentiment synthesis). A paid hosting tier resolves this. Try again in the " +
-          "meantime; it sometimes finishes within the limit.",
+        message: "This took too long to finish. Try again — it combines two AI steps and can take a minute or two.",
       });
     }
   }
@@ -79,9 +76,8 @@ export function SentimentPanel({ ticker }: { ticker: string }) {
         <p className="mt-3 text-xs text-gray-500">
           Reads real, already-analyzed news coverage and compares it against actual price movement and
           financial performance to judge how investors currently feel about the stock — and whether that
-          feeling matches reality. This combines two AI steps (news analysis, then sentiment synthesis), so
-          on Vercel&apos;s free hosting tier it may occasionally time out before finishing; a paid hosting
-          tier resolves this.
+          feeling matches reality. This combines two AI steps (news analysis, then sentiment synthesis)
+          and can take a minute or two.
         </p>
       )}
       {state.status === "error" && <p className="mt-3 text-sm text-red-400">{state.message}</p>}

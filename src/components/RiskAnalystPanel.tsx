@@ -48,10 +48,7 @@ export function RiskAnalystPanel({ ticker }: { ticker: string }) {
     } catch {
       setState({
         status: "error",
-        message:
-          "This took too long to finish, likely due to a hosting time limit — this combines two AI steps " +
-          "(news analysis, then risk synthesis). A paid hosting tier resolves this. Try again in the " +
-          "meantime; it sometimes finishes within the limit.",
+        message: "This took too long to finish. Try again — it combines two AI steps and can take a minute or two.",
       });
     }
   }
@@ -76,8 +73,7 @@ export function RiskAnalystPanel({ ticker }: { ticker: string }) {
           Actively challenges the investment case — looking for credible reasons the stock could
           decline, using real financial trends, real market data, and real news coverage. Not a
           generic list of risks; only what&apos;s actually relevant to this company. This combines two AI
-          steps (news analysis, then risk synthesis), so on Vercel&apos;s free hosting tier it may
-          occasionally time out before finishing; a paid hosting tier resolves this.
+          steps (news analysis, then risk synthesis) and can take a minute or two.
         </p>
       )}
       {state.status === "error" && <p className="mt-3 text-sm text-red-400">{state.message}</p>}

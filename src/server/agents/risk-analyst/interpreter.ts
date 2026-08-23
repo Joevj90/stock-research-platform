@@ -10,7 +10,7 @@ const log = logger.child("agents:risk-analyst:interpreter");
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
 const MODEL = "claude-sonnet-5";
-const FETCH_TIMEOUT_MS = 55_000; // raised from 45s -- stays under Vercel's 60s function limit while giving real-data generation more room
+const FETCH_TIMEOUT_MS = 90_000; // raised now that Vercel Pro allows much longer function execution
 
 const SYSTEM_PROMPT = `You are the Risk Analyst inside a stock research application, built for people who know very little about investing. Your job is to actively CHALLENGE the investment case -- assume other analysts covering this stock may be too optimistic, and look for credible reasons the stock could decline.
 

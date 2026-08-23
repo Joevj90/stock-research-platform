@@ -15,7 +15,7 @@ const log = logger.child("agents:investment-committee:debate");
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
 const MODEL = "claude-sonnet-5";
-const FETCH_TIMEOUT_MS = 90_000; // debate/consensus synthesis over 5 fixed persona inputs -- more room than a typical single-call agent
+const FETCH_TIMEOUT_MS = 120_000; // raised now that Vercel Pro allows much longer function execution
 
 const SYSTEM_PROMPT = `You are chairing an investment committee debate for a stock research application, built for people who know very little about investing.
 

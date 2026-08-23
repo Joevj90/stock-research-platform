@@ -8,7 +8,7 @@ const log = logger.child("api:final-report");
 // Investment Committee's two sequential calls) plus its own News
 // Intelligence call -- raise Vercel's function timeout to its Hobby-plan
 // maximum. On Vercel Pro or higher, this can be raised further (up to 300).
-export const maxDuration = 60;
+export const maxDuration = 300; // Vercel Pro allows up to 300s -- reuses Devil's Advocate's full chain plus its own News Intelligence call
 
 const STATUS_BY_ERROR_CODE: Record<string, number> = {
   MISSING_TICKER: 400,

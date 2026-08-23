@@ -5,7 +5,7 @@ import { logger } from "@/server/logger";
 // Two sequential AI calls (personas, then debate) on top of gathering all
 // 8 base agents -- raise Vercel's function timeout to its Hobby-plan
 // maximum so the platform doesn't cut the request off early.
-export const maxDuration = 60;
+export const maxDuration = 280; // Vercel Pro allows up to 300s -- gather + two sequential AI calls
 
 const log = logger.child("api:investment-committee");
 

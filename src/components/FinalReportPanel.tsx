@@ -65,9 +65,7 @@ export function FinalReportPanel({ ticker }: { ticker: string }) {
     } catch {
       setState({
         status: "error",
-        message:
-          "This took too long to finish, likely due to a hosting time limit. This is the most " +
-          "comprehensive report in the app — a paid hosting tier resolves this. Try again in the meantime.",
+        message: "This took too long to finish. It's the most comprehensive report in the app — try again; it can take several minutes.",
       });
     }
   }

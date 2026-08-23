@@ -54,11 +54,7 @@ export function InvestmentCommitteePanel({ ticker }: { ticker: string }) {
     } catch {
       setState({
         status: "error",
-        message:
-          "This took too long to finish, likely due to a hosting time limit — this combines five persona " +
-          "evaluations and a debate/consensus step, on top of the same 8-agent evidence Forecasting Agent " +
-          "uses. A paid hosting tier resolves this. Try again in the meantime; it sometimes finishes within " +
-          "the limit.",
+        message: "This took too long to finish. It combines five persona evaluations and a debate step — try again; it can take a few minutes.",
       });
     }
   }

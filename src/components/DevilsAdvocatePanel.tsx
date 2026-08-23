@@ -49,9 +49,8 @@ export function DevilsAdvocatePanel({ ticker }: { ticker: string }) {
       setState({
         status: "error",
         message:
-          "This took too long to finish, likely due to a hosting time limit on this analysis. It's the " +
-          "most demanding one in the app — a paid hosting tier resolves this. Try again in the meantime; " +
-          "it sometimes finishes within the limit.",
+          "This took too long to finish. It's the most demanding analysis in the app — try again; it " +
+          "usually completes within a few minutes.",
       });
     }
   }
@@ -76,8 +75,7 @@ export function DevilsAdvocatePanel({ ticker }: { ticker: string }) {
           Actively looks for reasons the Investment Committee&apos;s conclusion could be wrong — not
           automatically bearish, just genuinely skeptical. Requires the Committee&apos;s conclusion
           already exists for this stock, so run that first if you haven&apos;t. This is the most
-          demanding analysis in the app — on Vercel&apos;s free hosting tier it may time out before
-          finishing; a paid hosting tier resolves this.
+          demanding analysis in the app and can take several minutes to complete.
         </p>
       )}
       {state.status === "error" && <p className="mt-3 text-sm text-red-400">{state.message}</p>}

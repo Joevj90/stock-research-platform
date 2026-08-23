@@ -4,7 +4,7 @@ import { logger } from "@/server/logger";
 
 // Real, detailed data can take longer to generate than Vercel's default
 // function timeout allows -- raise it to the Hobby-plan maximum.
-export const maxDuration = 60;
+export const maxDuration = 180; // Vercel Pro allows up to 300s -- two sequential AI calls (News, then this agent's own)
 
 const log = logger.child("api:risk");
 
