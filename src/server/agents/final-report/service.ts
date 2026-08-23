@@ -2,10 +2,8 @@ import { runDevilsAdvocate } from "@/server/agents/devils-advocate";
 import { gatherAnalysisSummaries } from "@/server/agents/shared/analysis-summaries";
 import { runForecast } from "@/server/agents/forecasting";
 import { runInvestmentCommittee } from "@/server/agents/investment-committee";
-import { runNewsIntelligence } from "@/server/agents/news-intelligence";
 import { logger } from "@/server/logger";
 import type { Result } from "@/lib/types";
-import type { NewsIntelligenceResult } from "@/lib/news-types";
 import type { DataConsistencyNote, FinalReportResult } from "@/lib/final-report-types";
 import { bucketGrowthPct, bucketMarginPct, bucketRiskScore0To100, bucketScoreNeg100To100 } from "./labels";
 
@@ -27,10 +25,12 @@ const log = logger.child("agents:final-report");
  * `runForecast`, `runInvestmentCommittee`, and `runDevilsAdvocate` via
  * their `precomputed`/`precomputedGathered` parameters (all added
  * specifically to support this step, each verified against its own
- * existing test suite first). The one genuinely new call is
- * `runNewsIntelligence` -- section 7 needs real, sourced article URLs
- * that the shared gatherer's compact summaries never included, since
- * Forecast/Committee/Devil's Advocate never needed that level of detail.
+ * existing test suite first). Section 7's real, sourced article URLs
+ * come from `gathered.full.news` -- the shared gatherer now fetches News
+ * Intelligence exactly once and shares it with Sentiment Analysis, Risk
+ * Analyst, AND this report, so this function no longer makes any News
+ * call of its own (it used to; that redundant call was removed once the
+ * shared gatherer started fetching News itself).
  */
 export async function runFinalReport(rawTicker: string): Promise<Result<FinalReportResult>> {
   const ticker = rawTicker.trim().toUpperCase();
@@ -46,10 +46,9 @@ export async function runFinalReport(rawTicker: string): Promise<Result<FinalRep
     };
   }
 
-  const [forecastResult, committeeResult, newsResult] = await Promise.all([
+  const [forecastResult, committeeResult] = await Promise.all([
     runForecast(ticker, gathered),
     runInvestmentCommittee(ticker, gathered),
-    runNewsIntelligence(ticker),
   ]);
 
   // Sections 4 and 14 fundamentally require a real forecast; section 1's
@@ -84,7 +83,7 @@ export async function runFinalReport(rawTicker: string): Promise<Result<FinalRep
     ? da.committeeReview.revisedConfidence!
     : committee.finalConfidence;
 
-  const news: NewsIntelligenceResult | null = newsResult.ok ? newsResult.data : null;
+  const news = full.news;
   const topEvents = (news?.interpretation.importantEvents ?? []).slice(0, 5).map((event) => {
     const article = news?.articles.find((a) => a.url === event.primaryArticleUrl);
     return {

@@ -20,7 +20,10 @@ import { runMacroAnalysis } from "@/server/agents/macro-analysis";
 import { runCompetitorAnalysis } from "@/server/agents/competitor-analysis";
 import { runManagementAnalysis } from "@/server/agents/management-analysis";
 import { runRiskAnalysis } from "@/server/agents/risk-analyst";
+import { runNewsIntelligence } from "@/server/agents/news-intelligence";
 import { logger } from "@/server/logger";
+import type { Result } from "@/lib/types";
+import type { NewsIntelligenceResult } from "@/lib/news-types";
 import type { TechnicalAnalysisResult } from "@/server/agents/technical-analysis";
 import type { FundamentalAnalystResult } from "@/server/agents/fundamental-analyst";
 import type { ValuationResult } from "@/server/agents/valuation-engine";
@@ -62,7 +65,10 @@ export interface AnalysisSummaries {
  * in memory by the same calls; returning it costs nothing extra and lets
  * agents that need real detail (e.g. the Final Report, Step 17) avoid a
  * second redundant gather. Forecasting Agent and the Investment
- * Committee only ever read `summaries`; this field is additive. */
+ * Committee only ever read `summaries`; this field is additive.
+ *
+ * `news` is included here too, even though it isn't one of the "8
+ * agents" -- see the note on `gatherAnalysisSummaries` below for why. */
 export interface AnalysisFullResults {
   technical: TechnicalAnalysisResult | null;
   fundamental: FundamentalAnalystResult | null;
@@ -72,6 +78,7 @@ export interface AnalysisFullResults {
   competitor: CompetitorAnalysisResult | null;
   management: ManagementAnalysisResult | null;
   risk: RiskAnalysisResult | null;
+  news: NewsIntelligenceResult | null;
 }
 
 export interface GatheredAnalysisInputs {
@@ -87,20 +94,39 @@ export interface GatheredAnalysisInputs {
  * their public barrels only -- never a provider, never duplicated logic.
  * Each call is handled independently, so one failing (e.g. an FMP plan
  * limitation) never prevents the others from contributing.
+ *
+ * News Intelligence is fetched here too, exactly ONCE, and shared with
+ * both Sentiment Analysis and Risk Analyst (which each need it
+ * internally) via their `precomputedNews` parameter -- without this,
+ * each of those two agents would make its own independent News AI call,
+ * and any caller needing the raw news detail (like the Final Report)
+ * would trigger a third. Consolidating to one shared fetch here cuts a
+ * real, avoidable cost on every synthesis that touches sentiment, risk,
+ * or news content.
  */
 export async function gatherAnalysisSummaries(ticker: string): Promise<GatheredAnalysisInputs> {
-  const [snapshot, technical, fundamental, valuation, sentiment, macro, competitor, management, risk] =
-    await Promise.all([
-      getStockSnapshot(ticker, "1M").catch(() => null),
-      runTechnicalAnalysis(ticker).catch(() => null),
-      runFundamentalAnalysis(ticker).catch(() => null),
-      runValuationAnalysis(ticker).catch(() => null),
-      runSentimentAnalysis(ticker).catch(() => null),
-      runMacroAnalysis(ticker).catch(() => null),
-      runCompetitorAnalysis(ticker).catch(() => null),
-      runManagementAnalysis(ticker).catch(() => null),
-      runRiskAnalysis(ticker).catch(() => null),
-    ]);
+  const newsPromise = runNewsIntelligence(ticker).catch(
+    () => ({ ok: false, error: { code: "INTERNAL_ERROR", message: "News fetch threw." } }) as Result<NewsIntelligenceResult>
+  );
+
+  const [snapshot, technical, fundamental, valuation, macro, competitor, management, news] = await Promise.all([
+    getStockSnapshot(ticker, "1M").catch(() => null),
+    runTechnicalAnalysis(ticker).catch(() => null),
+    runFundamentalAnalysis(ticker).catch(() => null),
+    runValuationAnalysis(ticker).catch(() => null),
+    runMacroAnalysis(ticker).catch(() => null),
+    runCompetitorAnalysis(ticker).catch(() => null),
+    runManagementAnalysis(ticker).catch(() => null),
+    newsPromise,
+  ]);
+
+  // Sentiment and Risk both depend on News -- run them together, AFTER
+  // News resolves, passing that SAME result into both rather than
+  // letting each fetch it independently.
+  const [sentiment, risk] = await Promise.all([
+    runSentimentAnalysis(ticker, news).catch(() => null),
+    runRiskAnalysis(ticker, news).catch(() => null),
+  ]);
 
   const inputsUsed: AnalysisInputsAvailability = {
     technical: technical?.ok === true,
@@ -128,6 +154,7 @@ export async function gatherAnalysisSummaries(ticker: string): Promise<GatheredA
       competitor: competitor?.ok === true ? competitor.data : null,
       management: management?.ok === true ? management.data : null,
       risk: risk?.ok === true ? risk.data : null,
+      news: news.ok ? news.data : null,
     },
     summaries: {
       valuationDcfEstimates:

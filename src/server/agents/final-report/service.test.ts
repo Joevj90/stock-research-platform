@@ -14,13 +14,11 @@ vi.mock("@/server/agents/shared/analysis-summaries", () => ({ gatherAnalysisSumm
 vi.mock("@/server/agents/forecasting", () => ({ runForecast: vi.fn() }));
 vi.mock("@/server/agents/investment-committee", () => ({ runInvestmentCommittee: vi.fn() }));
 vi.mock("@/server/agents/devils-advocate", () => ({ runDevilsAdvocate: vi.fn() }));
-vi.mock("@/server/agents/news-intelligence", () => ({ runNewsIntelligence: vi.fn() }));
 
 const { gatherAnalysisSummaries } = await import("@/server/agents/shared/analysis-summaries");
 const { runForecast } = await import("@/server/agents/forecasting");
 const { runInvestmentCommittee } = await import("@/server/agents/investment-committee");
 const { runDevilsAdvocate } = await import("@/server/agents/devils-advocate");
-const { runNewsIntelligence } = await import("@/server/agents/news-intelligence");
 const { runFinalReport } = await import("./service");
 
 function scenario(overrides: Partial<ScenarioOutcome> = {}): ScenarioOutcome {
@@ -317,7 +315,10 @@ function riskResult(): RiskAnalysisResult {
   };
 }
 
-function gatheredFixture(currentPrice: number | null = 200): GatheredAnalysisInputs {
+function gatheredFixture(
+  currentPrice: number | null = 200,
+  news: NewsIntelligenceResult | null = null
+): GatheredAnalysisInputs {
   return {
     companyName: "Apple Inc.",
     currentPrice,
@@ -350,6 +351,7 @@ function gatheredFixture(currentPrice: number | null = 200): GatheredAnalysisInp
       competitor: competitorResult(),
       management: managementResult(),
       risk: riskResult(),
+      news,
     },
   };
 }
@@ -360,11 +362,10 @@ beforeEach(() => {
 
 describe("runFinalReport", () => {
   function mockHappyPath() {
-    (gatherAnalysisSummaries as ReturnType<typeof vi.fn>).mockResolvedValue(gatheredFixture());
+    (gatherAnalysisSummaries as ReturnType<typeof vi.fn>).mockResolvedValue(gatheredFixture(200, newsIntelResult()));
     (runForecast as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true, data: forecastResult() });
     (runInvestmentCommittee as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true, data: committeeResult() });
     (runDevilsAdvocate as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true, data: devilsAdvocateResult() });
-    (runNewsIntelligence as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true, data: newsIntelResult() });
   }
 
   it("gathers evidence once and reuses it across Forecast, Committee, and Devil's Advocate -- zero added AI-call cost", async () => {
@@ -404,7 +405,7 @@ describe("runFinalReport", () => {
   });
 
   it("reflects the Devil's Advocate's revision when the thesis WAS revised", async () => {
-    (gatherAnalysisSummaries as ReturnType<typeof vi.fn>).mockResolvedValue(gatheredFixture());
+    (gatherAnalysisSummaries as ReturnType<typeof vi.fn>).mockResolvedValue(gatheredFixture(200, newsIntelResult()));
     (runForecast as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true, data: forecastResult() });
     (runInvestmentCommittee as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true, data: committeeResult() });
     (runDevilsAdvocate as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -413,7 +414,6 @@ describe("runFinalReport", () => {
         committeeReview: { wasThesisRevised: true, revisedRating: "hold", revisedConfidence: 50, whatChangedAndWhy: "Weaknesses were significant." },
       }),
     });
-    (runNewsIntelligence as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true, data: newsIntelResult() });
 
     const result = await runFinalReport("AAPL");
     expect(result.ok).toBe(true);
@@ -460,15 +460,11 @@ describe("runFinalReport", () => {
     }
   });
 
-  it("degrades gracefully (empty defaults, not failure) when news intelligence fails", async () => {
-    (gatherAnalysisSummaries as ReturnType<typeof vi.fn>).mockResolvedValue(gatheredFixture());
+  it("degrades gracefully (empty defaults, not failure) when news intelligence is unavailable", async () => {
+    (gatherAnalysisSummaries as ReturnType<typeof vi.fn>).mockResolvedValue(gatheredFixture(200, null));
     (runForecast as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true, data: forecastResult() });
     (runInvestmentCommittee as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true, data: committeeResult() });
     (runDevilsAdvocate as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true, data: devilsAdvocateResult() });
-    (runNewsIntelligence as ReturnType<typeof vi.fn>).mockResolvedValue({
-      ok: false,
-      error: { code: "PROVIDER_PLAN_REQUIRED", message: "needs upgrade" },
-    });
 
     const result = await runFinalReport("AAPL");
     expect(result.ok).toBe(true);

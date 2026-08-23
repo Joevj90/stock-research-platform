@@ -4,6 +4,7 @@ import { getMacroIndicators } from "@/server/macro";
 import { runNewsIntelligence } from "@/server/agents/news-intelligence";
 import { logger } from "@/server/logger";
 import type { Result } from "@/lib/types";
+import type { NewsIntelligenceResult } from "@/lib/news-types";
 import type { RiskAnalysisResult } from "@/lib/risk-types";
 import { computeRiskSignals } from "./signals";
 import { interpretRisk } from "./interpreter";
@@ -29,8 +30,16 @@ const log = logger.child("agents:risk-analyst");
  * the same order of magnitude as Sentiment Analysis, while still giving
  * the Risk Analyst real, current, company-specific evidence to challenge
  * the investment case with.
+ *
+ * @param precomputedNews Optional -- see the identical parameter on
+ * `runSentimentAnalysis`. Lets the shared `gatherAnalysisSummaries`
+ * fetch News exactly once and reuse it across both agents instead of
+ * each fetching it independently.
  */
-export async function runRiskAnalysis(rawTicker: string): Promise<Result<RiskAnalysisResult>> {
+export async function runRiskAnalysis(
+  rawTicker: string,
+  precomputedNews?: Result<NewsIntelligenceResult>
+): Promise<Result<RiskAnalysisResult>> {
   const ticker = rawTicker.trim().toUpperCase();
   if (!ticker) {
     return { ok: false, error: { code: "MISSING_TICKER", message: "Ticker symbol is required." } };
@@ -42,7 +51,7 @@ export async function runRiskAnalysis(rawTicker: string): Promise<Result<RiskAna
       getHistoricalPrices(ticker, "6M"),
       getFundamentals(ticker, "annual"),
       getMacroIndicators(),
-      runNewsIntelligence(ticker),
+      precomputedNews ?? runNewsIntelligence(ticker),
       getStockSnapshot(ticker, "1M"),
     ]);
 

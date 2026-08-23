@@ -11,6 +11,7 @@ vi.mock("@/server/agents/macro-analysis", () => ({ runMacroAnalysis: vi.fn() }))
 vi.mock("@/server/agents/competitor-analysis", () => ({ runCompetitorAnalysis: vi.fn() }));
 vi.mock("@/server/agents/management-analysis", () => ({ runManagementAnalysis: vi.fn() }));
 vi.mock("@/server/agents/risk-analyst", () => ({ runRiskAnalysis: vi.fn() }));
+vi.mock("@/server/agents/news-intelligence", () => ({ runNewsIntelligence: vi.fn() }));
 vi.mock("./interpreter", () => ({ interpretForecast: vi.fn() }));
 
 const { getStockSnapshot } = await import("@/server/market-data");
@@ -22,6 +23,7 @@ const { runMacroAnalysis } = await import("@/server/agents/macro-analysis");
 const { runCompetitorAnalysis } = await import("@/server/agents/competitor-analysis");
 const { runManagementAnalysis } = await import("@/server/agents/management-analysis");
 const { runRiskAnalysis } = await import("@/server/agents/risk-analyst");
+const { runNewsIntelligence } = await import("@/server/agents/news-intelligence");
 const { interpretForecast } = await import("./interpreter");
 const { runForecast } = await import("./service");
 
@@ -103,6 +105,7 @@ describe("runForecast", () => {
     (runCompetitorAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
     (runManagementAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
     (runRiskAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
+    (runNewsIntelligence as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
     (interpretForecast as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true, data: SAMPLE_RAW_INTERPRETATION });
 
     const result = await runForecast("AAPL");
@@ -110,11 +113,11 @@ describe("runForecast", () => {
     expect(runTechnicalAnalysis).toHaveBeenCalledWith("AAPL");
     expect(runFundamentalAnalysis).toHaveBeenCalledWith("AAPL");
     expect(runValuationAnalysis).toHaveBeenCalledWith("AAPL");
-    expect(runSentimentAnalysis).toHaveBeenCalledWith("AAPL");
+    expect(runSentimentAnalysis).toHaveBeenCalledWith("AAPL", expect.anything());
     expect(runMacroAnalysis).toHaveBeenCalledWith("AAPL");
     expect(runCompetitorAnalysis).toHaveBeenCalledWith("AAPL");
     expect(runManagementAnalysis).toHaveBeenCalledWith("AAPL");
-    expect(runRiskAnalysis).toHaveBeenCalledWith("AAPL");
+    expect(runRiskAnalysis).toHaveBeenCalledWith("AAPL", expect.anything());
     expect(result.ok).toBe(true);
   });
 
@@ -127,6 +130,7 @@ describe("runForecast", () => {
     (runCompetitorAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
     (runManagementAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
     (runRiskAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
+    (runNewsIntelligence as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
     (interpretForecast as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true, data: SAMPLE_RAW_INTERPRETATION });
 
     const result = await runForecast("AAPL");
@@ -157,6 +161,7 @@ describe("runForecast", () => {
     (runCompetitorAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
     (runManagementAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
     (runRiskAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
+    (runNewsIntelligence as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
     (interpretForecast as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true, data: SAMPLE_RAW_INTERPRETATION });
 
     const result = await runForecast("AAPL");
@@ -176,6 +181,7 @@ describe("runForecast", () => {
     (runCompetitorAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
     (runManagementAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
     (runRiskAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
+    (runNewsIntelligence as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
     (interpretForecast as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true, data: SAMPLE_RAW_INTERPRETATION });
 
     const result = await runForecast("AAPL");
@@ -203,6 +209,7 @@ describe("runForecast", () => {
     (runCompetitorAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
     (runManagementAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
     (runRiskAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
+    (runNewsIntelligence as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
 
     const result = await runForecast("ZZZZZ");
     expect(result.ok).toBe(false);
@@ -219,6 +226,7 @@ describe("runForecast", () => {
     (runCompetitorAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
     (runManagementAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
     (runRiskAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
+    (runNewsIntelligence as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
     (interpretForecast as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: false,
       error: { code: "AI_NOT_CONFIGURED", message: "no key" },
@@ -271,6 +279,7 @@ describe("runForecast", () => {
         competitor: null,
         management: null,
         risk: null,
+      news: null,
       },
     };
 

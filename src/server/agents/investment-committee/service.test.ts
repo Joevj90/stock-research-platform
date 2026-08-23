@@ -53,6 +53,7 @@ function gathered(currentPrice: number | null = 200): GatheredAnalysisInputs {
       competitor: null,
       management: null,
       risk: null,
+      news: null,
     },
   };
 }

@@ -3,6 +3,7 @@ import { getQuote, getHistoricalPrices } from "@/server/market-data";
 import { getFundamentals } from "@/server/fundamentals";
 import { logger } from "@/server/logger";
 import type { Result } from "@/lib/types";
+import type { NewsIntelligenceResult } from "@/lib/news-types";
 import type { SentimentResult } from "@/lib/sentiment-types";
 import { computeMarketReaction } from "./market-reaction";
 import { computeFundamentalsSignal } from "./fundamentals-signal";
@@ -31,15 +32,24 @@ const log = logger.child("agents:sentiment-analysis");
  * This function never imports a provider, and never imports the news,
  * market-data, or fundamentals *providers* directly -- only their public
  * service/agent barrels.
+ *
+ * @param precomputedNews Optional -- if a caller (the shared
+ * `gatherAnalysisSummaries`, since both this agent and Risk Analyst need
+ * News independently) already has a fresh `runNewsIntelligence` result,
+ * pass it here to skip a redundant News AI call. Backward compatible:
+ * existing callers that omit this behave exactly as before.
  */
-export async function runSentimentAnalysis(rawTicker: string): Promise<Result<SentimentResult>> {
+export async function runSentimentAnalysis(
+  rawTicker: string,
+  precomputedNews?: Result<NewsIntelligenceResult>
+): Promise<Result<SentimentResult>> {
   const ticker = rawTicker.trim().toUpperCase();
   if (!ticker) {
     return { ok: false, error: { code: "MISSING_TICKER", message: "Ticker symbol is required." } };
   }
 
   const [newsResult, quoteResult, historyResult, fundamentalsResult] = await Promise.all([
-    runNewsIntelligence(ticker),
+    precomputedNews ?? runNewsIntelligence(ticker),
     getQuote(ticker),
     getHistoricalPrices(ticker, "1M"),
     getFundamentals(ticker, "annual"),
