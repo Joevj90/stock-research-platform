@@ -103,4 +103,52 @@ describe("parseAiJsonResponse", () => {
       expect(() => parseAiJsonResponse(input)).toThrow();
     });
   });
+
+  describe("repairs a trailing comma before a closing brace/bracket (the other real failure mode diagnosed)", () => {
+    it("repairs a trailing comma before a closing bracket in an array", () => {
+      const input = '{"keyRisks": ["Risk one", "Risk two",]}';
+      const result = parseAiJsonResponse(input);
+      expect(result).toEqual({ keyRisks: ["Risk one", "Risk two"] });
+    });
+
+    it("repairs a trailing comma before a closing brace in an object", () => {
+      const input = '{"a": 1, "b": 2,}';
+      const result = parseAiJsonResponse(input);
+      expect(result).toEqual({ a: 1, b: 2 });
+    });
+
+    it("repairs a trailing comma with whitespace/newlines between the comma and the closing bracket", () => {
+      const input = '{"keyRisks": [\n  "Risk one",\n  "Risk two",\n]}';
+      const result = parseAiJsonResponse(input);
+      expect(result).toEqual({ keyRisks: ["Risk one", "Risk two"] });
+    });
+
+    it("does not remove a comma that legitimately separates two more elements", () => {
+      const input = '{"a": 1, "b": 2, "c": 3}';
+      const result = parseAiJsonResponse(input);
+      expect(result).toEqual({ a: 1, b: 2, c: 3 });
+    });
+
+    it("does not corrupt a string value that itself contains a comma followed by other text", () => {
+      const input = '{"explanation": "Growth is strong, but risks remain."}';
+      const result = parseAiJsonResponse(input);
+      expect(result).toEqual({ explanation: "Growth is strong, but risks remain." });
+    });
+
+    it("repairs the exact real-world pattern diagnosed in production: a trailing comma after a nested scenario array, before the object closes", () => {
+      const input =
+        '{"bear": {"keyRisks": ["Free cash flow trend needs to stabilize", "Competitive pressure from Samsung and Google"], }, "bull": {"explanation": "x"}}';
+      const result = parseAiJsonResponse(input);
+      expect(result).toEqual({
+        bear: { keyRisks: ["Free cash flow trend needs to stabilize", "Competitive pressure from Samsung and Google"] },
+        bull: { explanation: "x" },
+      });
+    });
+  });
+
+  it("repairs BOTH an internal quote and a trailing comma in the same response", () => {
+    const input = '{"a": "the "quoted" term", "b": [1, 2,]}';
+    const result = parseAiJsonResponse(input);
+    expect(result).toEqual({ a: 'the "quoted" term', b: [1, 2] });
+  });
 });

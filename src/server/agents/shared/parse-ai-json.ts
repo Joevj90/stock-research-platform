@@ -6,14 +6,17 @@
  * stray leading/trailing word, a partial code fence, or similar minor
  * formatting slop despite that instruction. A naive `JSON.parse` on the
  * raw text fails in exactly those cases even though the actual JSON
- * payload is intact -- this function tries the strict parse first, and
- * only if that fails, falls back to locating the outermost `{...}`
- * substring and parsing that. It never repairs or guesses at malformed
- * JSON *content* -- if the extracted substring still isn't valid JSON
- * (e.g. genuine truncation mid-object), this throws an `AiJsonParseError`
- * carrying diagnostic detail (length, a snippet near the failure) so the
- * caller can log/surface enough to actually diagnose the real cause,
- * rather than a bare "invalid JSON" with no further information.
+ * payload is intact -- this function tries the strict parse first, then
+ * falls back to locating the outermost `{...}` substring, then finally
+ * to a targeted structural repair (`repairCommonJsonIssues`) for the
+ * specific syntax slips this app has actually observed in production
+ * (an unescaped quote used for emphasis, a trailing comma before a
+ * closing brace/bracket). It never guesses at JSON *content* -- if
+ * nothing produces valid JSON (e.g. genuine truncation mid-object), this
+ * throws an `AiJsonParseError` carrying diagnostic detail (length, a
+ * snippet near the failure) so the caller can log/surface enough to
+ * actually diagnose the real cause, rather than a bare "invalid JSON"
+ * with no further information.
  */
 
 export class AiJsonParseError extends Error {
@@ -61,18 +64,19 @@ export function parseAiJsonResponse(rawText: string): unknown {
     // Fall through to the repair pass below.
   }
 
-  // Last resort: models occasionally write a quoted phrase for emphasis
-  // inside a string value (e.g. the "base case" scenario) without
-  // realizing the inner quotes need escaping, which breaks parsing from
-  // that point on even though the rest of the response is fine. This is
-  // a best-effort structural repair, NOT a guess at content -- it only
-  // escapes a quote when it is clearly positioned mid-string (not
-  // adjacent to a JSON structural character), and the result is always
-  // re-validated by a real JSON.parse before being trusted. If the
-  // repair doesn't produce valid JSON, this falls through to the same
-  // honest failure as before -- it never silently returns corrupted data.
+  // Last resort: models occasionally produce two specific, well-understood
+  // syntax slips that break otherwise-intact JSON:
+  //   (1) a quoted phrase for emphasis inside a string value (e.g. the
+  //       "base case" scenario) without escaping the inner quotes, and
+  //   (2) a trailing comma before a closing `}`/`]` -- valid in
+  //       JavaScript object/array literals, never valid in strict JSON.
+  // Both are repaired in a single structural pass, NOT a guess at
+  // content -- the result is always re-validated by a real JSON.parse
+  // before being trusted. If the repair doesn't produce valid JSON, this
+  // falls through to the same honest failure as before -- it never
+  // silently returns corrupted data.
   try {
-    return JSON.parse(escapeLikelyInternalQuotes(candidate));
+    return JSON.parse(repairCommonJsonIssues(candidate));
   } catch (err) {
     // Genuinely malformed/truncated -- carry diagnostic detail so the
     // caller isn't stuck with a bare "invalid JSON" and no way to tell
@@ -93,21 +97,26 @@ export function parseAiJsonResponse(rawText: string): unknown {
 }
 
 /**
- * Escapes double-quote characters that are clearly positioned INSIDE a
- * JSON string value rather than at a legitimate string boundary. A
- * single forward pass tracking whether we're currently inside a string:
- * when a `"` is encountered while inside a string, it's only treated as
- * the real closing quote if the next non-whitespace character is a
- * plausible JSON structural character (`:`, `,`, `}`, `]`, or end of
- * text) -- otherwise it's an internal quote and gets escaped, and
- * scanning continues looking for the real closing quote. Already-escaped
- * quotes (`\"`) are left untouched. This is deliberately conservative:
- * it only fires on the specific pattern this app has actually observed
- * (a quoted phrase for emphasis inside natural-language text), and the
- * caller always re-validates the result with a real JSON.parse rather
- * than trusting this heuristic on its own.
+ * Repairs two specific, well-understood JSON syntax issues in a single
+ * forward pass that tracks whether we're currently inside a string:
+ *
+ *   1. A `"` encountered while inside a string is only treated as the
+ *      real closing quote if the next non-whitespace character is a
+ *      plausible JSON structural character (`:`, `,`, `}`, `]`, or end of
+ *      text) -- otherwise it's an internal quote (e.g. a quoted phrase
+ *      used for emphasis) and gets escaped, and scanning continues
+ *      looking for the real closing quote.
+ *   2. A `,` encountered OUTSIDE a string, when the next non-whitespace
+ *      character is `}` or `]`, is a trailing comma -- always invalid in
+ *      strict JSON regardless of context, so it's simply omitted.
+ *
+ * Already-escaped characters (`\"`, `\n`, etc.) are preserved as-is.
+ * This is deliberately narrow: it only fires on the two specific
+ * patterns this app has actually observed in production, and the caller
+ * always re-validates the result with a real JSON.parse rather than
+ * trusting this heuristic on its own.
  */
-function escapeLikelyInternalQuotes(text: string): string {
+function repairCommonJsonIssues(text: string): string {
   let result = "";
   let inString = false;
 
@@ -133,9 +142,7 @@ function escapeLikelyInternalQuotes(text: string): string {
       // whether what follows (skipping whitespace) looks like a real
       // JSON structural transition. If so, this is the legitimate
       // closing quote; otherwise it's an internal quote to escape.
-      let j = i + 1;
-      while (j < text.length && /\s/.test(text[j]!)) j++;
-      const next = text[j];
+      const next = nextNonWhitespace(text, i + 1);
       const looksLikeRealClose = next === undefined || [":", ",", "}", "]"].includes(next);
 
       if (looksLikeRealClose) {
@@ -147,10 +154,24 @@ function escapeLikelyInternalQuotes(text: string): string {
       continue;
     }
 
+    if (char === "," && !inString) {
+      const next = nextNonWhitespace(text, i + 1);
+      if (next === "}" || next === "]") {
+        // Trailing comma -- omit it entirely rather than copying it through.
+        continue;
+      }
+    }
+
     result += char;
   }
 
   return result;
+}
+
+function nextNonWhitespace(text: string, fromIndex: number): string | undefined {
+  let j = fromIndex;
+  while (j < text.length && /\s/.test(text[j]!)) j++;
+  return text[j];
 }
 
 /** Node/V8's JSON.parse SyntaxError messages typically include either
