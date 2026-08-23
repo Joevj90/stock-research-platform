@@ -42,9 +42,20 @@ describe("parseAiJsonResponse", () => {
     expect(() => parseAiJsonResponse('{"a": 1, "b": [1, 2, ')).toThrow();
   });
 
-  it("throws an AiJsonParseError carrying a snippet centered on the failure position for a mid-string syntax error", () => {
-    // An unescaped quote inside a string value -- a real-world failure mode.
+  it("repairs a simple mid-string unescaped quote rather than needing to fail", () => {
+    // An unescaped quote inside a string value -- exactly the real-world failure mode
+    // this repair pass exists for. Confirms it recovers rather than throwing.
     const input = '{"a": "text with an "unescaped" quote inside", "b": 2}';
+    const result = parseAiJsonResponse(input);
+    expect(result).toEqual({ a: 'text with an "unescaped" quote inside', b: 2 });
+  });
+
+  it("throws when no JSON object is present at all", () => {
+    expect(() => parseAiJsonResponse("I cannot complete this request.")).toThrow();
+  });
+
+  it("throws an AiJsonParseError with diagnostic detail for a genuinely unrepairable (truncated) response", () => {
+    const input = '{"a": 1, "b": [1, 2, ';
     try {
       parseAiJsonResponse(input);
       expect.unreachable("should have thrown");
@@ -55,7 +66,41 @@ describe("parseAiJsonResponse", () => {
     }
   });
 
-  it("throws when no JSON object is present at all", () => {
-    expect(() => parseAiJsonResponse("I cannot complete this request.")).toThrow();
+  describe("repairs an unescaped internal quote (the real failure mode this app diagnosed)", () => {
+    it("repairs a quoted phrase used for emphasis inside a string value", () => {
+      // The exact pattern diagnosed in production: a term wrapped in quotes for emphasis.
+      const input = '{"explanation": "This assumes the "base case" scenario holds true.", "score": 5}';
+      const result = parseAiJsonResponse(input);
+      expect(result).toEqual({ explanation: 'This assumes the "base case" scenario holds true.', score: 5 });
+    });
+
+    it("repairs an internal quote inside a string that is itself inside an array", () => {
+      const input = '{"reasons": ["Because of the "brand strength" factor", "A second reason"]}';
+      const result = parseAiJsonResponse(input);
+      expect(result).toEqual({ reasons: ['Because of the "brand strength" factor', "A second reason"] });
+    });
+
+    it("repairs multiple separate internal-quote occurrences across different fields", () => {
+      const input = '{"a": "the "first" term", "b": "the "second" term"}';
+      const result = parseAiJsonResponse(input);
+      expect(result).toEqual({ a: 'the "first" term', b: 'the "second" term' });
+    });
+
+    it("does not corrupt already-valid JSON containing commas and colons inside string content", () => {
+      const input = '{"explanation": "Growth is strong, but risks remain: margins could compress.", "score": 5}';
+      const result = parseAiJsonResponse(input);
+      expect(result).toEqual({ explanation: "Growth is strong, but risks remain: margins could compress.", score: 5 });
+    });
+
+    it("does not corrupt already-valid JSON with properly escaped quotes", () => {
+      const input = '{"explanation": "This is a \\"properly escaped\\" quote."}';
+      const result = parseAiJsonResponse(input);
+      expect(result).toEqual({ explanation: 'This is a "properly escaped" quote.' });
+    });
+
+    it("still throws honestly (never silently returns wrong data) when the JSON is genuinely truncated, not just quote-broken", () => {
+      const input = '{"explanation": "This assumes the "base case" scenario holds true';
+      expect(() => parseAiJsonResponse(input)).toThrow();
+    });
   });
 });

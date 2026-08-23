@@ -57,6 +57,22 @@ export function parseAiJsonResponse(rawText: string): unknown {
   const candidate = stripped.slice(firstBrace, lastBrace + 1);
   try {
     return JSON.parse(candidate);
+  } catch {
+    // Fall through to the repair pass below.
+  }
+
+  // Last resort: models occasionally write a quoted phrase for emphasis
+  // inside a string value (e.g. the "base case" scenario) without
+  // realizing the inner quotes need escaping, which breaks parsing from
+  // that point on even though the rest of the response is fine. This is
+  // a best-effort structural repair, NOT a guess at content -- it only
+  // escapes a quote when it is clearly positioned mid-string (not
+  // adjacent to a JSON structural character), and the result is always
+  // re-validated by a real JSON.parse before being trusted. If the
+  // repair doesn't produce valid JSON, this falls through to the same
+  // honest failure as before -- it never silently returns corrupted data.
+  try {
+    return JSON.parse(escapeLikelyInternalQuotes(candidate));
   } catch (err) {
     // Genuinely malformed/truncated -- carry diagnostic detail so the
     // caller isn't stuck with a bare "invalid JSON" and no way to tell
@@ -74,6 +90,67 @@ export function parseAiJsonResponse(rawText: string): unknown {
       snippetAtFailure
     );
   }
+}
+
+/**
+ * Escapes double-quote characters that are clearly positioned INSIDE a
+ * JSON string value rather than at a legitimate string boundary. A
+ * single forward pass tracking whether we're currently inside a string:
+ * when a `"` is encountered while inside a string, it's only treated as
+ * the real closing quote if the next non-whitespace character is a
+ * plausible JSON structural character (`:`, `,`, `}`, `]`, or end of
+ * text) -- otherwise it's an internal quote and gets escaped, and
+ * scanning continues looking for the real closing quote. Already-escaped
+ * quotes (`\"`) are left untouched. This is deliberately conservative:
+ * it only fires on the specific pattern this app has actually observed
+ * (a quoted phrase for emphasis inside natural-language text), and the
+ * caller always re-validates the result with a real JSON.parse rather
+ * than trusting this heuristic on its own.
+ */
+function escapeLikelyInternalQuotes(text: string): string {
+  let result = "";
+  let inString = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i]!;
+
+    if (char === "\\" && i + 1 < text.length) {
+      // Preserve any escape sequence as-is (e.g. \", \n, \\) without
+      // reinterpreting the character after the backslash.
+      result += char + text[i + 1];
+      i++;
+      continue;
+    }
+
+    if (char === '"') {
+      if (!inString) {
+        inString = true;
+        result += char;
+        continue;
+      }
+
+      // We're inside a string and hit an unescaped quote -- check
+      // whether what follows (skipping whitespace) looks like a real
+      // JSON structural transition. If so, this is the legitimate
+      // closing quote; otherwise it's an internal quote to escape.
+      let j = i + 1;
+      while (j < text.length && /\s/.test(text[j]!)) j++;
+      const next = text[j];
+      const looksLikeRealClose = next === undefined || [":", ",", "}", "]"].includes(next);
+
+      if (looksLikeRealClose) {
+        inString = false;
+        result += char;
+      } else {
+        result += '\\"';
+      }
+      continue;
+    }
+
+    result += char;
+  }
+
+  return result;
 }
 
 /** Node/V8's JSON.parse SyntaxError messages typically include either
