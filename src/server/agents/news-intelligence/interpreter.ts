@@ -142,10 +142,23 @@ export async function interpretNews(
 
     const validation = InterpretationSchema.safeParse(parsedJson);
     if (!validation.success) {
-      log.error("AI response failed schema validation", {
-        issues: validation.error.issues.map((i) => i.message),
-      });
-      return { ok: false, error: { code: "AI_PARSE_ERROR", message: "AI response did not match the required schema." } };
+      const issues = validation.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`);
+
+      log.error("AI response failed schema validation", { issues });
+
+      return {
+
+        ok: false,
+
+        error: {
+
+          code: "AI_PARSE_ERROR",
+
+          message: `AI response did not match the required schema. [diag: ${issues.slice(0, 5).join("; ")}]`,
+
+        },
+
+      };
     }
 
     // Anti-hallucination guardrail: drop any event referencing a URL that
