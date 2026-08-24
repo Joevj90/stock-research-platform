@@ -82,17 +82,21 @@ export function parseAiJsonResponse(rawText: string): unknown {
   } catch (err) {
     // Genuinely malformed/truncated -- carry diagnostic detail so the
     // caller isn't stuck with a bare "invalid JSON" and no way to tell
-    // truncation apart from a real mid-string syntax problem.
+    // truncation apart from a real mid-string syntax problem. A wide
+    // window (especially more context BEFORE the reported position) is
+    // deliberate: errors like "Colon expected" are often a downstream
+    // symptom of a problem earlier in the text, not located exactly at
+    // the reported offset.
     const errorMessage = err instanceof Error ? err.message : "Unknown JSON parse error";
     const position = extractErrorPosition(errorMessage);
     const snippetAtFailure =
-      position !== null ? candidate.slice(Math.max(0, position - 150), position + 150) : null;
+      position !== null ? candidate.slice(Math.max(0, position - 400), position + 200) : null;
 
     throw new AiJsonParseError(
       errorMessage,
       rawText.length,
-      candidate.slice(0, 200),
-      candidate.slice(-200),
+      candidate.slice(0, 300),
+      candidate.slice(-300),
       snippetAtFailure
     );
   }
