@@ -132,7 +132,7 @@ export async function interpretForecast(
     model: MODEL,
     systemPrompt: SYSTEM_PROMPT,
     userContent: JSON.stringify(input),
-    maxTokens: 8192,
+    maxTokens: 16000, // raised from 8192 -- diagnostics showed genuine truncation partway through the 3rd (12-month) horizon; this schema is the most content-dense in the app (3 horizons x 3 scenarios each)
     timeoutMs: FETCH_TIMEOUT_MS,
   });
   if (!callResult.ok) return callResult;
