@@ -152,7 +152,7 @@ export async function interpretDevilsAdvocate(
     model: MODEL,
     systemPrompt: SYSTEM_PROMPT,
     userContent: JSON.stringify(input),
-    maxTokens: 8192,
+    maxTokens: 16000, // raised from 8192 -- diagnostics showed genuine truncation after confidenceConcerns; this schema is comparably content-dense to Forecasting Agent's (up to 5 weaknesses x 6 fields, plus 4 more capped lists, plus the committee review)
     timeoutMs: FETCH_TIMEOUT_MS,
   });
   if (!callResult.ok) return callResult;
