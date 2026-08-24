@@ -1,36 +1,34 @@
 import { runDevilsAdvocate } from "@/server/agents/devils-advocate";
-import { gatherAnalysisSummaries } from "@/server/agents/shared/analysis-summaries";
+import { gatherAnalysisSummaries, type GatheredAnalysisInputs } from "@/server/agents/shared/analysis-summaries";
 import { runForecast } from "@/server/agents/forecasting";
 import { runInvestmentCommittee } from "@/server/agents/investment-committee";
 import { logger } from "@/server/logger";
 import type { Result } from "@/lib/types";
+import type { ForecastResult } from "@/lib/forecast-types";
+import type { CommitteeResult } from "@/lib/investment-committee-types";
+import type { DevilsAdvocateResult } from "@/lib/devils-advocate-types";
 import type { DataConsistencyNote, FinalReportResult } from "@/lib/final-report-types";
 import { bucketGrowthPct, bucketMarginPct, bucketRiskScore0To100, bucketScoreNeg100To100 } from "./labels";
 
 const log = logger.child("agents:final-report");
 
 /**
- * The Final AI Investment Report.
- *
- * This is deliberately a PRESENTATION layer, not another analysis layer
- * -- "do not independently calculate new financial metrics unless
- * necessary" and "must use existing outputs" are followed literally:
- * this service makes NO new AI call of its own. Every section is either
- * copied directly from an existing agent's real output, or a
- * deterministic label bucketed from a real score (`labels.ts`) --
- * formatting, not new judgment.
- *
- * Zero added AI-call cost beyond Devil's Advocate's own chain: this
- * service gathers the 8-agent evidence exactly once and feeds it into
- * `runForecast`, `runInvestmentCommittee`, and `runDevilsAdvocate` via
- * their `precomputed`/`precomputedGathered` parameters (all added
- * specifically to support this step, each verified against its own
- * existing test suite first). Section 7's real, sourced article URLs
- * come from `gathered.full.news` -- the shared gatherer now fetches News
- * Intelligence exactly once and shares it with Sentiment Analysis, Risk
- * Analyst, AND this report, so this function no longer makes any News
- * call of its own (it used to; that redundant call was removed once the
- * shared gatherer started fetching News itself).
+ * The Final AI Investment Report -- the single-request convenience
+ * wrapper. This chains gather -> Forecast+Committee (parallel) ->
+ * Devil's Advocate -> assembly, all in one call, exactly as Steps 1-17
+ * always have. Kept for completeness/tests and any future direct
+ * server-side usage, but the live UI (`FinalReportPanel`) now drives the
+ * SAME pieces through separate, shorter-lived API routes (see
+ * `/api/final-report/[ticker]/gather`, `/forecast`, `/committee`,
+ * `/devils-advocate`, `/assemble`) -- this app's deepest chain
+ * (gather -> Forecast/Committee -> Devil's Advocate) can, in the worst
+ * case, exceed even Vercel Pro's 300-second function limit when run as
+ * one request; splitting it into several short requests the client
+ * orchestrates sequentially means each individual step comfortably fits
+ * within the limit even though the whole process still takes a few
+ * minutes end to end. Every step below calls the exact same real
+ * functions this one-shot version does -- no duplicated logic, just a
+ * different caller.
  */
 export async function runFinalReport(rawTicker: string): Promise<Result<FinalReportResult>> {
   const ticker = rawTicker.trim().toUpperCase();
@@ -51,9 +49,6 @@ export async function runFinalReport(rawTicker: string): Promise<Result<FinalRep
     runInvestmentCommittee(ticker, gathered),
   ]);
 
-  // Sections 4 and 14 fundamentally require a real forecast; section 1's
-  // rating fundamentally requires a real committee conclusion. Without
-  // both, this report can't honestly claim to be "the final report."
   if (!forecastResult.ok) return forecastResult;
   if (!committeeResult.ok) return committeeResult;
 
@@ -63,11 +58,33 @@ export async function runFinalReport(rawTicker: string): Promise<Result<FinalRep
     return devilsAdvocateResult;
   }
 
-  const forecast = forecastResult.data;
-  const committee = committeeResult.data.interpretation;
-  const da = devilsAdvocateResult.data;
+  return assembleFinalReport(ticker, gathered, forecastResult.data, committeeResult.data, devilsAdvocateResult.data);
+}
+
+/**
+ * The PURE ASSEMBLY step -- "do not independently calculate new
+ * financial metrics unless necessary" and "must use existing outputs"
+ * followed literally: this makes NO AI call and NO network call at all.
+ * Every section is either copied directly from an already-computed real
+ * result, or a deterministic label bucketed from a real score
+ * (`labels.ts`) -- formatting, not new judgment. This is fast enough
+ * (well under a second) to run as its own final API step in the
+ * multi-step flow, taking the already-fetched results of the previous
+ * four steps as plain input.
+ */
+export function assembleFinalReport(
+  ticker: string,
+  gathered: GatheredAnalysisInputs,
+  forecast: ForecastResult,
+  committeeResult: CommitteeResult,
+  da: DevilsAdvocateResult
+): Result<FinalReportResult> {
+  const committee = committeeResult.interpretation;
   const { full, companyName } = gathered;
   const currentPrice = gathered.currentPrice;
+  if (currentPrice === null) {
+    return { ok: false, error: { code: "INVALID_TICKER", message: `Could not find price data for "${ticker}".` } };
+  }
 
   const twelveMonth = forecast.interpretation.horizons.find((h) => h.horizon === "12_month");
   if (!twelveMonth) {

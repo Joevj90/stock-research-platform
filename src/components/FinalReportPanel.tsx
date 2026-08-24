@@ -6,11 +6,23 @@ import type {
 } from "@/lib/investment-committee-types";
 import type { FinalReportResult, QualityLabel } from "@/lib/final-report-types";
 import type { ScenarioOutcome } from "@/lib/forecast-types";
+import type { GatheredAnalysisInputs } from "@/server/agents/shared/analysis-summaries";
+import type { ForecastResult } from "@/lib/forecast-types";
+import type { CommitteeResult } from "@/lib/investment-committee-types";
+import type { DevilsAdvocateResult } from "@/lib/devils-advocate-types";
+
+const STEPS = [
+  { key: "gather", label: "Gathering all analyses" },
+  { key: "forecast", label: "Building the forecast" },
+  { key: "committee", label: "Convening the investment committee" },
+  { key: "devils-advocate", label: "Challenging the conclusion" },
+  { key: "assemble", label: "Assembling the final report" },
+] as const;
 
 type State =
   | { status: "idle" }
-  | { status: "loading" }
-  | { status: "error"; message: string }
+  | { status: "loading"; stepIndex: number }
+  | { status: "error"; message: string; failedStepIndex: number }
   | { status: "success"; data: FinalReportResult };
 
 const RATING_STYLE: Record<CommitteeRecommendation, { label: string; color: string; bg: string }> = {
@@ -41,33 +53,88 @@ const ENV_LABEL: Record<string, { label: string; color: string }> = {
   unfavorable: { label: "UNFAVORABLE", color: "text-down" },
 };
 
+async function postStep<T>(url: string, body?: unknown): Promise<{ ok: true; data: T } | { ok: false; message: string }> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: body ? { "content-type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    return { ok: false, message: json.error?.message ?? "This step failed." };
+  }
+  return { ok: true, data: json as T };
+}
+
 /**
  * The main "Final Analysis" summary, per spec. Deliberately built to be
  * readable top-to-bottom without expanding anything, with detailed
- * supporting sections collapsed by default. On-demand since it depends
- * on the same deep chain as Devil's Advocate (Forecast + Committee) plus
- * its own News Intelligence call — no new AI reasoning of its own, just
- * assembly of what those agents already concluded.
+ * supporting sections collapsed by default.
+ *
+ * Runs as 5 separate, short-lived requests the browser orchestrates in
+ * sequence (gather → forecast → committee → Devil's Advocate → assemble)
+ * rather than one giant request. This app's deepest chain can, in the
+ * worst case, exceed even Vercel Pro's 300-second function limit when
+ * run as a single request; splitting it into steps the client drives
+ * one at a time means each individual step comfortably fits within the
+ * limit, even though the whole process still takes a few minutes end to
+ * end — and if one step fails, only that step needs to be retried, not
+ * the entire chain from scratch.
  */
 export function FinalReportPanel({ ticker }: { ticker: string }) {
   const [state, setState] = useState<State>({ status: "idle" });
 
   async function runReport() {
-    setState({ status: "loading" });
-    try {
-      const res = await fetch(`/api/final-report/${ticker}`);
-      const body = await res.json();
-      if (!res.ok) {
-        setState({ status: "error", message: body.error?.message ?? "Final report failed." });
-        return;
-      }
-      setState({ status: "success", data: body as FinalReportResult });
-    } catch {
-      setState({
-        status: "error",
-        message: "This took too long to finish. It's the most comprehensive report in the app — try again; it can take several minutes.",
-      });
+    setState({ status: "loading", stepIndex: 0 });
+
+    const gatherRes = await postStep<GatheredAnalysisInputs>(`/api/final-report/${ticker}/gather`);
+    if (!gatherRes.ok) {
+      setState({ status: "error", message: gatherRes.message, failedStepIndex: 0 });
+      return;
     }
+    const gathered = gatherRes.data;
+
+    setState({ status: "loading", stepIndex: 1 });
+    const forecastRes = await postStep<ForecastResult>(`/api/final-report/${ticker}/forecast`, { gathered });
+    if (!forecastRes.ok) {
+      setState({ status: "error", message: forecastRes.message, failedStepIndex: 1 });
+      return;
+    }
+    const forecast = forecastRes.data;
+
+    setState({ status: "loading", stepIndex: 2 });
+    const committeeRes = await postStep<CommitteeResult>(`/api/final-report/${ticker}/committee`, { gathered });
+    if (!committeeRes.ok) {
+      setState({ status: "error", message: committeeRes.message, failedStepIndex: 2 });
+      return;
+    }
+    const committee = committeeRes.data;
+
+    setState({ status: "loading", stepIndex: 3 });
+    const daRes = await postStep<DevilsAdvocateResult>(`/api/final-report/${ticker}/devils-advocate`, {
+      gathered,
+      forecast,
+      committee,
+    });
+    if (!daRes.ok) {
+      setState({ status: "error", message: daRes.message, failedStepIndex: 3 });
+      return;
+    }
+    const devilsAdvocate = daRes.data;
+
+    setState({ status: "loading", stepIndex: 4 });
+    const assembleRes = await postStep<FinalReportResult>(`/api/final-report/${ticker}/assemble`, {
+      gathered,
+      forecast,
+      committee,
+      devilsAdvocate,
+    });
+    if (!assembleRes.ok) {
+      setState({ status: "error", message: assembleRes.message, failedStepIndex: 4 });
+      return;
+    }
+
+    setState({ status: "success", data: assembleRes.data });
   }
 
   return (
@@ -87,11 +154,20 @@ export function FinalReportPanel({ ticker }: { ticker: string }) {
         <p className="mt-3 text-xs text-gray-500">
           Brings together everything on this page — technical, fundamental, valuation, sentiment, macro,
           competitor, management, and risk analysis, the Forecasting Agent, the Investment Committee, and
-          the Devil&apos;s Advocate — into one complete, easy-to-read report. This is the most thorough
-          analysis in the app and can take a minute or more.
+          the Devil&apos;s Advocate — into one complete, easy-to-read report. Runs as 5 separate steps so
+          progress is visible along the way; the whole process can take a few minutes.
         </p>
       )}
-      {state.status === "error" && <p className="mt-3 text-sm text-red-400">{state.message}</p>}
+      {state.status === "loading" && <StepProgress currentStepIndex={state.stepIndex} failedStepIndex={null} />}
+      {state.status === "error" && (
+        <div className="mt-3">
+          <StepProgress currentStepIndex={state.failedStepIndex} failedStepIndex={state.failedStepIndex} />
+          <p className="mt-2 text-sm text-red-400">{state.message}</p>
+          <p className="mt-1 text-xs text-gray-500">
+            Clicking &quot;Generate Final Report&quot; will start over from the first step.
+          </p>
+        </div>
+      )}
       {state.status === "success" && <ReportView data={state.data} />}
     </section>
   );
@@ -329,6 +405,46 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     <div className="border-t border-border pt-5">
       <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">{title}</h3>
       {children}
+    </div>
+  );
+}
+
+function StepProgress({
+  currentStepIndex,
+  failedStepIndex,
+}: {
+  currentStepIndex: number;
+  failedStepIndex: number | null;
+}) {
+  return (
+    <div className="mt-3 flex flex-col gap-1.5">
+      {STEPS.map((step, i) => {
+        const isDone = failedStepIndex === null ? i < currentStepIndex : i < failedStepIndex;
+        const isFailed = i === failedStepIndex;
+        const isActive = failedStepIndex === null && i === currentStepIndex;
+
+        return (
+          <div key={step.key} className="flex items-center gap-2 text-xs">
+            <span
+              className={
+                isFailed
+                  ? "text-down"
+                  : isDone
+                    ? "text-up"
+                    : isActive
+                      ? "text-accent"
+                      : "text-gray-600"
+              }
+            >
+              {isFailed ? "✕" : isDone ? "✓" : isActive ? "…" : "○"}
+            </span>
+            <span className={isDone || isActive || isFailed ? "text-gray-300" : "text-gray-600"}>
+              {step.label}
+              {isFailed && " — failed"}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }

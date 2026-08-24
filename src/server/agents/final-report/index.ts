@@ -1,4 +1,4 @@
-export { runFinalReport } from "./service";
+export { runFinalReport, assembleFinalReport } from "./service";
 export type {
   FinalReportResult,
   QuickAnswer,
