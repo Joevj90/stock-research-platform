@@ -54,16 +54,28 @@ const ENV_LABEL: Record<string, { label: string; color: string }> = {
 };
 
 async function postStep<T>(url: string, body?: unknown): Promise<{ ok: true; data: T } | { ok: false; message: string }> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: body ? { "content-type": "application/json" } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const json = await res.json();
-  if (!res.ok) {
-    return { ok: false, message: json.error?.message ?? "This step failed." };
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: body ? { "content-type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      return { ok: false, message: json.error?.message ?? "This step failed." };
+    }
+    return { ok: true, data: json as T };
+  } catch {
+    // fetch() itself throws on network failures, aborted connections, or
+    // some timeout scenarios -- without this catch, that exception would
+    // propagate uncaught out of runReport() and leave the UI stuck on
+    // "loading" forever with no error shown, since nothing would ever
+    // update the state past the in-flight step.
+    return {
+      ok: false,
+      message: "This step took too long or lost connection. Try again — it sometimes finishes within the limit.",
+    };
   }
-  return { ok: true, data: json as T };
 }
 
 /**
