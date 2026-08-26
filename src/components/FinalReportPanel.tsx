@@ -1,29 +1,13 @@
 "use client";
 
-import { useState } from "react";
 import type {
   CommitteeRecommendation,
 } from "@/lib/investment-committee-types";
 import type { FinalReportResult, QualityLabel } from "@/lib/final-report-types";
 import type { ScenarioOutcome } from "@/lib/forecast-types";
-import type { GatheredAnalysisInputs } from "@/server/agents/shared/analysis-summaries";
-import type { ForecastResult } from "@/lib/forecast-types";
-import type { CommitteeResult } from "@/lib/investment-committee-types";
-import type { DevilsAdvocateResult } from "@/lib/devils-advocate-types";
+import { useFinalReportGeneration, FINAL_REPORT_STEPS } from "@/hooks/useFinalReportGeneration";
 
-const STEPS = [
-  { key: "gather", label: "Gathering all analyses" },
-  { key: "forecast", label: "Building the forecast" },
-  { key: "committee", label: "Convening the investment committee" },
-  { key: "devils-advocate", label: "Challenging the conclusion" },
-  { key: "assemble", label: "Assembling the final report" },
-] as const;
-
-type State =
-  | { status: "idle" }
-  | { status: "loading"; stepIndex: number }
-  | { status: "error"; message: string; failedStepIndex: number }
-  | { status: "success"; data: FinalReportResult };
+const STEPS = FINAL_REPORT_STEPS;
 
 const RATING_STYLE: Record<CommitteeRecommendation, { label: string; color: string; bg: string }> = {
   buy: { label: "BULLISH", color: "text-up", bg: "bg-up/10" },
@@ -53,31 +37,6 @@ const ENV_LABEL: Record<string, { label: string; color: string }> = {
   unfavorable: { label: "UNFAVORABLE", color: "text-down" },
 };
 
-async function postStep<T>(url: string, body?: unknown): Promise<{ ok: true; data: T } | { ok: false; message: string }> {
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: body ? { "content-type": "application/json" } : undefined,
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    const json = await res.json();
-    if (!res.ok) {
-      return { ok: false, message: json.error?.message ?? "This step failed." };
-    }
-    return { ok: true, data: json as T };
-  } catch {
-    // fetch() itself throws on network failures, aborted connections, or
-    // some timeout scenarios -- without this catch, that exception would
-    // propagate uncaught out of runReport() and leave the UI stuck on
-    // "loading" forever with no error shown, since nothing would ever
-    // update the state past the in-flight step.
-    return {
-      ok: false,
-      message: "This step took too long or lost connection. Try again — it sometimes finishes within the limit.",
-    };
-  }
-}
-
 /**
  * The main "Final Analysis" summary, per spec. Deliberately built to be
  * readable top-to-bottom without expanding anything, with detailed
@@ -85,69 +44,18 @@ async function postStep<T>(url: string, body?: unknown): Promise<{ ok: true; dat
  *
  * Runs as 5 separate, short-lived requests the browser orchestrates in
  * sequence (gather → forecast → committee → Devil's Advocate → assemble)
- * rather than one giant request. This app's deepest chain can, in the
- * worst case, exceed even Vercel Pro's 300-second function limit when
- * run as a single request; splitting it into steps the client drives
- * one at a time means each individual step comfortably fits within the
- * limit, even though the whole process still takes a few minutes end to
- * end — and if one step fails, only that step needs to be retried, not
- * the entire chain from scratch.
+ * rather than one giant request, via the shared `useFinalReportGeneration`
+ * hook (also used by `AnalysisHistoryPanel`'s "Research Again" button,
+ * Step 19). This app's deepest chain can, in the worst case, exceed even
+ * Vercel Pro's 300-second function limit when run as a single request;
+ * splitting it into steps the client drives one at a time means each
+ * individual step comfortably fits within the limit, even though the
+ * whole process still takes a few minutes end to end — and if one step
+ * fails, only that step needs to be retried, not the entire chain from
+ * scratch.
  */
 export function FinalReportPanel({ ticker }: { ticker: string }) {
-  const [state, setState] = useState<State>({ status: "idle" });
-
-  async function runReport() {
-    setState({ status: "loading", stepIndex: 0 });
-
-    const gatherRes = await postStep<GatheredAnalysisInputs>(`/api/final-report/${ticker}/gather`);
-    if (!gatherRes.ok) {
-      setState({ status: "error", message: gatherRes.message, failedStepIndex: 0 });
-      return;
-    }
-    const gathered = gatherRes.data;
-
-    setState({ status: "loading", stepIndex: 1 });
-    const forecastRes = await postStep<ForecastResult>(`/api/final-report/${ticker}/forecast`, { gathered });
-    if (!forecastRes.ok) {
-      setState({ status: "error", message: forecastRes.message, failedStepIndex: 1 });
-      return;
-    }
-    const forecast = forecastRes.data;
-
-    setState({ status: "loading", stepIndex: 2 });
-    const committeeRes = await postStep<CommitteeResult>(`/api/final-report/${ticker}/committee`, { gathered });
-    if (!committeeRes.ok) {
-      setState({ status: "error", message: committeeRes.message, failedStepIndex: 2 });
-      return;
-    }
-    const committee = committeeRes.data;
-
-    setState({ status: "loading", stepIndex: 3 });
-    const daRes = await postStep<DevilsAdvocateResult>(`/api/final-report/${ticker}/devils-advocate`, {
-      gathered,
-      forecast,
-      committee,
-    });
-    if (!daRes.ok) {
-      setState({ status: "error", message: daRes.message, failedStepIndex: 3 });
-      return;
-    }
-    const devilsAdvocate = daRes.data;
-
-    setState({ status: "loading", stepIndex: 4 });
-    const assembleRes = await postStep<FinalReportResult>(`/api/final-report/${ticker}/assemble`, {
-      gathered,
-      forecast,
-      committee,
-      devilsAdvocate,
-    });
-    if (!assembleRes.ok) {
-      setState({ status: "error", message: assembleRes.message, failedStepIndex: 4 });
-      return;
-    }
-
-    setState({ status: "success", data: assembleRes.data });
-  }
+  const { state, runReport } = useFinalReportGeneration(ticker);
 
   return (
     <section className="rounded-xl border-2 border-accent/50 bg-panel p-6">
@@ -421,7 +329,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function StepProgress({
+export function StepProgress({
   currentStepIndex,
   failedStepIndex,
 }: {

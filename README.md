@@ -220,6 +220,78 @@ with raw ratios up front.
 Try it: `GET /api/fundamental-analysis/AAPL?period=annual`, or "Run
 Analysis" under Fundamental Analyst on a stock's page.
 
+## Analysis History & Reassessment
+
+Lets the user manually re-research a stock at any time and see exactly
+what changed since last time, at `src/server/analysis-history`.
+Explicitly **not** continuous or automatic — "do NOT build continuous
+background monitoring... only retrieve current information when the
+user explicitly clicks Research Again."
+
+**"Research Again" reuses the real Final Report flow, adding no new
+analysis logic of its own:** the 5-step generation sequence (gather →
+forecast → committee → Devil's Advocate → assemble) that
+`FinalReportPanel` already used was extracted into a shared hook
+(`useFinalReportGeneration`) specifically so this step's "Research
+Again" button could reuse the exact same real flow rather than
+duplicating it. Both components now use the identical hook; nothing
+about how a Final Report gets generated changed.
+
+**Saving happens automatically, with no new user-facing step:** the
+existing `/api/final-report/[ticker]/assemble` route was extended
+(one `await saveAnalysis(...)` call) to permanently record every
+completed Final Report as a new, immutable historical version the
+moment it finishes. "Research Again" is genuinely just "run Final
+Report again" — the history and comparison are a byproduct of that,
+not a separate expensive step.
+
+**Immutability, enforced structurally:** `save-service.ts` only ever
+calls `prisma.savedAnalysis.create` — there is no `update` call
+anywhere in this module, so it is structurally impossible for a saved
+analysis to be modified after the fact. A dedicated test confirms this.
+Each `SavedAnalysis` row stores both the individual comparable fields
+(for fast history-table queries) and the complete verbatim
+`FinalReportResult` as JSON (so "view the report exactly as it was" is
+always available) — a deliberate, query-driven duplication, not an
+accidental one.
+
+**Comparison is free until there's something to compare:** viewing
+history never makes an AI call when 0 or 1 analyses exist for a ticker.
+Once 2+ exist, comparing the two most recent triggers exactly one
+focused AI call (`comparison-interpreter.ts`) — deliberately smaller
+and cheaper than a full analysis, since its only job is explaining a
+diff between two already-complete real conclusions, not forming a new
+one. A dedicated test confirms history is still returned even if this
+comparison call fails.
+
+**"Do NOT change the rating simply because the stock price changed" is
+enforced at two levels:** the deterministic `computeComparisonDeltas`
+only ever *reports* price/confidence/return deltas, never judges them —
+and the AI prompt explicitly requires separating what changed because
+of the **stock price** (the market re-pricing the same expectations)
+from what changed because of the **business** (the actual outlook
+changing), a distinction shown as two separate sections in the UI.
+
+**FACT / CALCULATION / AI INTERPRETATION:** every field on a saved
+analysis is FACT (copied verbatim from a real completed report, never
+re-derived); the price/rating/confidence deltas are CALCULATION (pure
+arithmetic, `comparison-calculations.ts`); the "what changed and why it
+matters" narrative, thesis-change classification, and price-vs-business
+separation are AI INTERPRETATION.
+
+**UI:** "Research Again" is the main action; the history table shows
+date/rating/expected price/confidence/stock price for every saved
+version with a "View" link that opens the exact historical report
+(price/rating/bottom line/committee conclusion/Devil's Advocate finding,
+unchanged since the moment it was generated); a comparison card shows
+before/after, "What Changed Since Your Last Analysis," the thesis-change
+verdict, price-vs-business separation, and What Improved/Got Worse/
+Stayed The Same; a simple month-grouped timeline shows how the rating
+evolved.
+
+Try it: `GET /api/analysis-history/AAPL` (once at least one Final
+Report has been generated for that ticker).
+
 ## Prediction Tracking & Accuracy
 
 Permanently records every forecast the app makes and grades it against
@@ -979,7 +1051,11 @@ Advocate all at once, and Prediction Tracking's deterministic accuracy
 math (36 tests alone, including the spec's own "12-month prediction not
 wrong after 1 month" example) plus a dedicated test proving evaluation
 updates can only ever touch the initially-null evaluation columns, never
-an original prediction field (513 tests total). These are
+an original prediction field, and Analysis History's immutability
+guarantee (a dedicated test confirms `save-service.ts` only ever calls
+`create`, never `update`) plus its graceful degradation when a
+comparison's AI call fails (real saved history is still returned rather
+than hidden) (577 tests total). These are
 unit tests — a good next step is integration tests against a real test
 database.
 

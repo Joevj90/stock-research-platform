@@ -37,6 +37,7 @@ model Stock {
   insiderTransactions InsiderTransaction[]
   insiderTradingCacheEntries InsiderTradingCacheEntry[]
   predictions Prediction[]
+  savedAnalyses SavedAnalysis[]
   analyses     Analysis[]
   forecasts    Forecast[]
 
@@ -395,4 +396,60 @@ model Prediction {
   @@index([ticker, horizon])
   @@index([evaluationDueDate, evaluatedAt])
   @@map("predictions")
+}
+
+/// A complete, permanent, immutable snapshot of one Final AI Investment
+/// Report (Step 17) for one ticker at one point in time -- Step 19's
+/// entire data-integrity requirement in one model: "never overwrite an
+/// old analysis... every completed analysis must be saved as a separate
+/// historical version." Created automatically whenever a Final Report
+/// finishes assembling; every field here is written once and never
+/// updated afterward. `fullReportJson` preserves the complete report
+/// verbatim so a historical version can be viewed exactly as it was,
+/// while the individual comparable fields below are denormalized out of
+/// it purely so the history table and comparisons can query them
+/// directly without parsing JSON on every read -- a reasonable,
+/// query-driven duplication, not "unnecessary."
+model SavedAnalysis {
+  id           String   @id @default(cuid())
+  stockId      String
+  stock        Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  ticker       String
+  companyName  String?
+  analysisDate DateTime @default(now())
+
+  // --- Comparable figures (FACT, copied verbatim from the real report) ---
+  priceAtAnalysis    Float
+  rating             String // "buy" | "hold" | "sell"
+  confidenceScore    Float
+  bearPrice          Float
+  basePrice          Float
+  bullPrice          Float
+  expectedPrice      Float
+  expectedReturnPct  Float
+  bearProbabilityPct Float
+  baseProbabilityPct Float
+  bullProbabilityPct Float
+
+  // --- Real conclusions, copied verbatim (not re-derived) ---
+  valuationConclusion      String
+  sentimentConclusion      String
+  macroConclusion          String
+  competitorConclusion     String
+  managementConclusion     String
+  committeeConclusion      String
+  devilsAdvocateConclusion String
+  bottomLine               String
+
+  // --- JSON-encoded lists, copied verbatim ---
+  majorAssumptions String // JSON string[]
+  majorRisks       String // JSON string[]
+  majorCatalysts   String // JSON string[]
+  keyNewsFindings  String // JSON of {headline,url,source,whatHappened}[]
+
+  // --- Full verbatim report, for "view the report exactly as it was" ---
+  fullReportJson String // JSON-encoded FinalReportResult
+
+  @@index([ticker, analysisDate])
+  @@map("saved_analyses")
 }
