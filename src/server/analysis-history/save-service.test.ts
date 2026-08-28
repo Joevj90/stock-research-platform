@@ -38,6 +38,7 @@ function report(): FinalReportResult {
       currentPrice: 200,
       expectedPrice: 220,
       expectedReturnPct: 10,
+      expectedReturnHorizon: "12_month",
       confidenceScore: 70,
       explanation: "The committee is optimistic.",
     },
@@ -50,6 +51,11 @@ function report(): FinalReportResult {
       expectedPrice: 220,
       expectedReturnPct: 10,
     },
+    forecastHorizons: [
+      { horizon: "3_month", expectedPrice: 205, expectedReturnPct: 2.5 },
+      { horizon: "6_month", expectedPrice: 212, expectedReturnPct: 6 },
+      { horizon: "12_month", expectedPrice: 220, expectedReturnPct: 10 },
+    ],
     businessQuality: {
       financialHealth: "strong",
       growth: "good",
@@ -71,7 +77,7 @@ function report(): FinalReportResult {
     biggestRisks: [{ risk: "Slowing growth", evidence: "x", severity: "medium", probability: "medium", potentialImpact: "x", timeFrame: "medium_term", whatWouldConfirmIt: "x", whatWouldReduceIt: "x" }],
     devilsAdvocate: { whatCouldWeBeMissing: [], strongestArgumentAgainst: "x", didItChangeAnything: false, whatChanged: null },
     whatWouldChangeAiMind: { moreBearishIf: [], lessWorriedIf: [] },
-    finalConclusion: { bottomLine: "Overall positive.", rating: "buy", confidenceScore: 70, expectedReturnPct: 10 },
+    finalConclusion: { bottomLine: "Overall positive.", rating: "buy", confidenceScore: 70, expectedReturnPct: 10, expectedReturnHorizon: "12_month" },
     dataConsistencyNotes: [],
     sources: [{ label: "Big news", url: "https://example.com/a" }],
   };

@@ -93,12 +93,20 @@ export function assembleFinalReport(
 
   // Reflect the Devil's Advocate's revision if one genuinely happened --
   // otherwise the report should show the Committee's original conclusion.
+  // The rating and the confidence score are revised independently: a
+  // critique can justify adjusting confidence (e.g. the Committee's
+  // number looked overstated relative to a near-tied vote) without being
+  // strong enough to flip the buy/hold/sell rating itself -- so
+  // finalConfidence must check wasConfidenceRevised too, not just
+  // wasThesisRevised, or a legitimate confidence-only critique would
+  // silently be dropped.
   const finalRating = da.committeeReview.wasThesisRevised
     ? da.committeeReview.revisedRating!
     : committee.finalRecommendation;
-  const finalConfidence = da.committeeReview.wasThesisRevised
-    ? da.committeeReview.revisedConfidence!
-    : committee.finalConfidence;
+  const finalConfidence =
+    da.committeeReview.wasThesisRevised || da.committeeReview.wasConfidenceRevised
+      ? da.committeeReview.revisedConfidence!
+      : committee.finalConfidence;
 
   const news = full.news;
   const topEvents = (news?.interpretation.importantEvents ?? []).slice(0, 5).map((event) => {
@@ -146,6 +154,7 @@ export function assembleFinalReport(
         currentPrice,
         expectedPrice: twelveMonth.expectedPrice,
         expectedReturnPct: twelveMonth.expectedReturnPct,
+        expectedReturnHorizon: "12_month",
         confidenceScore: finalConfidence,
         explanation: committee.overallConclusion,
       },
@@ -160,6 +169,16 @@ export function assembleFinalReport(
         expectedPrice: twelveMonth.expectedPrice,
         expectedReturnPct: twelveMonth.expectedReturnPct,
       },
+
+      // All three horizons the Forecasting Agent already computed
+      // (Step 14) -- reused verbatim, nothing recalculated here -- so the
+      // report can show 3/6/12-month expected returns instead of only
+      // the 12-month figure used above.
+      forecastHorizons: forecast.interpretation.horizons.map((h) => ({
+        horizon: h.horizon,
+        expectedPrice: h.expectedPrice,
+        expectedReturnPct: h.expectedReturnPct,
+      })),
 
       businessQuality: {
         financialHealth: bucketScoreNeg100To100(full.fundamental?.interpretation.overallFundamentalScore ?? null),
@@ -213,7 +232,10 @@ export function assembleFinalReport(
       devilsAdvocate: {
         whatCouldWeBeMissing: da.interpretation.overlookedRisks.slice(0, 5),
         strongestArgumentAgainst: da.interpretation.finalConclusion,
-        didItChangeAnything: da.committeeReview.wasThesisRevised,
+        // Either kind of revision (rating or confidence-only) counts as
+        // "changed something" here -- see the finalConfidence comment
+        // above for why confidence-only revisions matter too.
+        didItChangeAnything: da.committeeReview.wasThesisRevised || da.committeeReview.wasConfidenceRevised,
         whatChanged: da.committeeReview.whatChangedAndWhy,
       },
 
@@ -227,6 +249,7 @@ export function assembleFinalReport(
         rating: finalRating,
         confidenceScore: finalConfidence,
         expectedReturnPct: twelveMonth.expectedReturnPct,
+        expectedReturnHorizon: "12_month",
       },
 
       dataConsistencyNotes,

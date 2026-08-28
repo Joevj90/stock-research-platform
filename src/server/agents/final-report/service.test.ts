@@ -136,7 +136,7 @@ function devilsAdvocateResult(overrides: Partial<DevilsAdvocateResult> = {}): De
       recommendedChanges: [],
       finalConclusion: "The thesis holds up reasonably well.",
     },
-    committeeReview: { wasThesisRevised: false, revisedRating: null, revisedConfidence: null, whatChangedAndWhy: null },
+    committeeReview: { wasThesisRevised: false, revisedRating: null, wasConfidenceRevised: false, revisedConfidence: null, whatChangedAndWhy: null },
     gathered: gatheredFixture(),
     forecast: forecastResult(),
     committee: committeeResult(),
@@ -411,7 +411,7 @@ describe("runFinalReport", () => {
     (runDevilsAdvocate as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,
       data: devilsAdvocateResult({
-        committeeReview: { wasThesisRevised: true, revisedRating: "hold", revisedConfidence: 50, whatChangedAndWhy: "Weaknesses were significant." },
+        committeeReview: { wasThesisRevised: true, revisedRating: "hold", wasConfidenceRevised: true, revisedConfidence: 50, whatChangedAndWhy: "Weaknesses were significant." },
       }),
     });
 
@@ -420,6 +420,37 @@ describe("runFinalReport", () => {
     if (result.ok) {
       expect(result.data.quickAnswer.rating).toBe("hold");
       expect(result.data.quickAnswer.confidenceScore).toBe(50);
+      expect(result.data.devilsAdvocate.didItChangeAnything).toBe(true);
+    }
+  });
+
+  it("reflects a confidence-only revision even when the rating was NOT revised", async () => {
+    (gatherAnalysisSummaries as ReturnType<typeof vi.fn>).mockResolvedValue(gatheredFixture(200, newsIntelResult()));
+    (runForecast as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true, data: forecastResult() });
+    (runInvestmentCommittee as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true, data: committeeResult() });
+    (runDevilsAdvocate as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      data: devilsAdvocateResult({
+        committeeReview: {
+          wasThesisRevised: false,
+          revisedRating: null,
+          wasConfidenceRevised: true,
+          revisedConfidence: 55,
+          whatChangedAndWhy: "The committee vote was nearly tied, so confidence looked overstated.",
+        },
+      }),
+    });
+
+    const result = await runFinalReport("AAPL");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // Rating unchanged (still the Committee's original "buy")...
+      expect(result.data.quickAnswer.rating).toBe("buy");
+      expect(result.data.finalConclusion.rating).toBe("buy");
+      // ...but confidence reflects the Devil's Advocate's revision, not
+      // the Committee's original 70.
+      expect(result.data.quickAnswer.confidenceScore).toBe(55);
+      expect(result.data.finalConclusion.confidenceScore).toBe(55);
       expect(result.data.devilsAdvocate.didItChangeAnything).toBe(true);
     }
   });

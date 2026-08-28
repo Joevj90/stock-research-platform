@@ -82,10 +82,20 @@ export interface DevilsAdvocateInterpretation {
  * critique and the original conclusion already), never applied
  * automatically. `wasThesisRevised` is false unless the critique
  * genuinely justified a change.
+ *
+ * `wasThesisRevised` (the buy/hold/sell rating) and `wasConfidenceRevised`
+ * (the confidence score) are INDEPENDENT flags -- a critique can be
+ * strong enough to justify lowering confidence without being strong
+ * enough to flip the rating itself (e.g. a near-tied committee vote
+ * dressed up with an overstated confidence score, but where the
+ * underlying rating still holds). `revisedConfidence` is populated
+ * whenever EITHER flag is true; `revisedRating` only when
+ * `wasThesisRevised` is true.
  */
 export interface CommitteeReview {
   wasThesisRevised: boolean;
   revisedRating: CommitteeRecommendation | null;
+  wasConfidenceRevised: boolean;
   revisedConfidence: number | null;
   whatChangedAndWhy: string | null;
 }

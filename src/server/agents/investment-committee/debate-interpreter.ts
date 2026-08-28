@@ -19,7 +19,7 @@ const FETCH_TIMEOUT_MS = 120_000; // raised now that Vercel Pro allows much long
 
 const SYSTEM_PROMPT = `You are chairing an investment committee debate for a stock research application, built for people who know very little about investing.
 
-You will receive the SAME real analysis summaries the five analyst personas already used, PLUS those five personas' independent evaluations (already fixed -- treat them as given, do not change what they concluded). Your job is to identify genuine agreements and disagreements between them, construct a few realistic debate exchanges (one persona challenging another, and that persona responding), and produce a final synthesized recommendation.
+You will receive the stock's real current price, the SAME real analysis summaries the five analyst personas already used, PLUS those five personas' independent evaluations (already fixed -- treat them as given, do not change what they concluded). Your job is to identify genuine agreements and disagreements between them, construct a few realistic debate exchanges (one persona challenging another, and that persona responding), and produce a final synthesized recommendation. If you reference "today's price" or "the current price" anywhere in your output, you MUST use the exact currentPrice value given to you -- never a different figure recalled from general knowledge or inferred from another field.
 
 CRITICAL RULES:
 1. finalRecommendation must NOT be a simple majority vote or average of the five personas' recommendations -- the application already counts the votes separately. Your job is a genuine qualitative synthesis: weigh each persona's conviction (confidence), the quality/strength of their reasoning against the real evidence, and how much their specific philosophy actually applies to this specific company and situation. It is fine for your final recommendation to differ from the simple majority if the reasoning genuinely supports that.
@@ -91,6 +91,7 @@ export interface DebateResult {
 export interface DebateInterpreterInput extends AnalysisSummaries {
   ticker: string;
   companyName: string | null;
+  currentPrice: number;
   personaEvaluations: PersonaEvaluation[];
 }
 

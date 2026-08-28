@@ -60,7 +60,7 @@ export async function runDevilsAdvocate(
     };
   }
 
-  const { companyName, summaries } = gathered;
+  const { companyName, currentPrice, summaries } = gathered;
 
   const [forecastResult, committeeResult] = precomputed
     ? [precomputed.forecastResult, precomputed.committeeResult]
@@ -85,6 +85,7 @@ export async function runDevilsAdvocate(
   const interpretationResult = await interpretDevilsAdvocate({
     ticker,
     companyName,
+    currentPrice,
     ...summaries,
     committee: {
       finalRecommendation: committee.finalRecommendation,

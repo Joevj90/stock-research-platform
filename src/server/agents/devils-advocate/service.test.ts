@@ -147,7 +147,7 @@ const SAMPLE_INTERPRETER_OUTPUT: DevilsAdvocateInterpreterOutput = {
     recommendedChanges: [],
     finalConclusion: "x",
   },
-  committeeReview: { wasThesisRevised: false, revisedRating: null, revisedConfidence: null, whatChangedAndWhy: null },
+  committeeReview: { wasThesisRevised: false, revisedRating: null, wasConfidenceRevised: false, revisedConfidence: null, whatChangedAndWhy: null },
 };
 
 beforeEach(() => {

@@ -3,8 +3,8 @@
 import type {
   CommitteeRecommendation,
 } from "@/lib/investment-committee-types";
-import type { FinalReportResult, QualityLabel } from "@/lib/final-report-types";
-import type { ScenarioOutcome } from "@/lib/forecast-types";
+import type { FinalReportResult, HorizonReturn, QualityLabel } from "@/lib/final-report-types";
+import type { ForecastHorizonKey, ScenarioOutcome } from "@/lib/forecast-types";
 import { useFinalReportGeneration, FINAL_REPORT_STEPS, GATHER_SUB_STEPS } from "@/hooks/useFinalReportGeneration";
 
 const STEPS = FINAL_REPORT_STEPS;
@@ -35,6 +35,12 @@ const ENV_LABEL: Record<string, { label: string; color: string }> = {
   favorable: { label: "FAVORABLE", color: "text-up" },
   neutral: { label: "NEUTRAL", color: "text-gray-300" },
   unfavorable: { label: "UNFAVORABLE", color: "text-down" },
+};
+
+const HORIZON_LABEL: Record<ForecastHorizonKey, string> = {
+  "3_month": "3-Month",
+  "6_month": "6-Month",
+  "12_month": "12-Month",
 };
 
 /**
@@ -111,15 +117,16 @@ function ReportView({ data }: { data: FinalReportResult }) {
             <div className={`text-xl font-bold tracking-wide ${rating.color}`}>{rating.label}</div>
           </div>
           <Stat label="Current Price" value={`$${data.quickAnswer.currentPrice.toFixed(2)}`} />
-          <Stat label="Expected Price" value={`$${data.quickAnswer.expectedPrice}`} />
+          <Stat label={`Expected Price (${HORIZON_LABEL[data.quickAnswer.expectedReturnHorizon]})`} value={`$${data.quickAnswer.expectedPrice}`} />
           <Stat
-            label="Expected Return"
+            label={`Expected Return (${HORIZON_LABEL[data.quickAnswer.expectedReturnHorizon]})`}
             value={`${data.quickAnswer.expectedReturnPct >= 0 ? "+" : ""}${data.quickAnswer.expectedReturnPct}%`}
             color={data.quickAnswer.expectedReturnPct >= 0 ? "text-up" : "text-down"}
           />
           <Stat label="Confidence" value={`${data.quickAnswer.confidenceScore}/100`} />
         </div>
         <p className="mt-3 text-sm text-gray-300">{data.quickAnswer.explanation}</p>
+        <HorizonReturnRow horizons={data.forecastHorizons} />
       </div>
 
       {/* 2 & 3. Why AI likes / worried */}
@@ -305,7 +312,7 @@ function ReportView({ data }: { data: FinalReportResult }) {
           <Stat label="AI Rating" value={RATING_STYLE[data.finalConclusion.rating].label} color={RATING_STYLE[data.finalConclusion.rating].color} />
           <Stat label="Confidence" value={`${data.finalConclusion.confidenceScore}/100`} />
           <Stat
-            label="Expected Return"
+            label={`Expected Return (${HORIZON_LABEL[data.finalConclusion.expectedReturnHorizon]})`}
             value={`${data.finalConclusion.expectedReturnPct >= 0 ? "+" : ""}${data.finalConclusion.expectedReturnPct}%`}
             color={data.finalConclusion.expectedReturnPct >= 0 ? "text-up" : "text-down"}
           />
@@ -412,6 +419,42 @@ function ScenarioCard({ scenario }: { scenario: ScenarioOutcome }) {
         <span className="text-[10px] text-gray-500">{scenario.probabilityPct}%</span>
       </div>
       <div className={`mt-1 text-xl font-semibold tabular-nums ${color}`}>${scenario.priceTarget}</div>
+    </div>
+  );
+}
+
+/**
+ * The three forecast horizons (3/6/12-month) side by side, each showing
+ * its own expected return -- all three figures reused verbatim from the
+ * Forecasting Agent's already-computed HorizonForecast.expectedReturnPct
+ * (see forecasting/calculations.ts), nothing recalculated here. Exists
+ * so the report doesn't show only the unlabeled 12-month figure in the
+ * Quick Answer stats above; horizons are always rendered in 3/6/12-month
+ * order regardless of the order the API returned them in.
+ */
+function HorizonReturnRow({ horizons }: { horizons: HorizonReturn[] }) {
+  const order: ForecastHorizonKey[] = ["3_month", "6_month", "12_month"];
+  const byHorizon = new Map(horizons.map((h) => [h.horizon, h]));
+
+  if (horizons.length === 0) return null;
+
+  return (
+    <div className="mt-4 grid grid-cols-3 gap-2">
+      {order.map((key) => {
+        const h = byHorizon.get(key);
+        if (!h) return null;
+        const positive = h.expectedReturnPct >= 0;
+        return (
+          <div key={key} className="rounded-lg border border-border bg-bg/40 p-2.5 text-center">
+            <div className="text-[10px] uppercase tracking-wide text-gray-500">{HORIZON_LABEL[key]}</div>
+            <div className={`mt-1 text-sm font-semibold tabular-nums ${positive ? "text-up" : "text-down"}`}>
+              {positive ? "+" : ""}
+              {h.expectedReturnPct}%
+            </div>
+            <div className="text-[10px] text-gray-500">${h.expectedPrice}</div>
+          </div>
+        );
+      })}
     </div>
   );
 }

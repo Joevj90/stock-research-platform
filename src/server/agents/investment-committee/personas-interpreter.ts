@@ -12,7 +12,7 @@ const log = logger.child("agents:investment-committee:personas");
 const MODEL = "claude-sonnet-5";
 const FETCH_TIMEOUT_MS = 90_000; // raised now that Vercel Pro allows much longer function execution
 
-const SYSTEM_PROMPT = `You are generating five INDEPENDENT investment analyst evaluations for a stock research application, built for people who know very little about investing. You will receive real summaries from technical, fundamental, valuation, sentiment, macro, competitor, management, and risk analyses of one company.
+const SYSTEM_PROMPT = `You are generating five INDEPENDENT investment analyst evaluations for a stock research application, built for people who know very little about investing. You will receive the stock's real current price, plus real summaries from technical, fundamental, valuation, sentiment, macro, competitor, management, and risk analyses of one company. If you reference "today's price" or "the current price" anywhere in your output, you MUST use the exact currentPrice value given to you -- never a different figure recalled from general knowledge or inferred from another field.
 
 Produce exactly 5 evaluations, one for EACH of these personas, each with a genuinely distinct investment philosophy:
 - value_investor: cares most about whether the price is cheap relative to real earnings/assets/cash flow; skeptical of high valuations regardless of growth story; wants a margin of safety.
@@ -65,6 +65,7 @@ const ResponseSchema = z.object({
 export interface PersonasInterpreterInput extends AnalysisSummaries {
   ticker: string;
   companyName: string | null;
+  currentPrice: number;
 }
 
 /**

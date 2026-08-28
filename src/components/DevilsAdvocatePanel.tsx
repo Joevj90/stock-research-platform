@@ -180,13 +180,21 @@ function ResultView({ result }: { result: DevilsAdvocateResult }) {
         <p className="mt-1 text-xs text-gray-400">{interpretation.whyChangeOrNot}</p>
       </div>
 
-      <div className={`rounded-lg border p-3 ${committeeReview.wasThesisRevised ? "border-yellow-700/40 bg-yellow-900/10" : "border-border bg-bg/40"}`}>
+      <div className={`rounded-lg border p-3 ${(committeeReview.wasThesisRevised || committeeReview.wasConfidenceRevised) ? "border-yellow-700/40 bg-yellow-900/10" : "border-border bg-bg/40"}`}>
         <h3 className="text-xs font-semibold text-gray-200">Investment Committee Review</h3>
         {committeeReview.wasThesisRevised ? (
           <>
             <p className="mt-1 text-xs text-yellow-300">
               Rating updated: {originalCommitteeRating.toUpperCase()} ({originalCommitteeConfidence}% confidence) →{" "}
               {committeeReview.revisedRating?.toUpperCase()} ({committeeReview.revisedConfidence}% confidence)
+            </p>
+            <p className="mt-1 text-xs text-gray-400">{committeeReview.whatChangedAndWhy}</p>
+          </>
+        ) : committeeReview.wasConfidenceRevised ? (
+          <>
+            <p className="mt-1 text-xs text-yellow-300">
+              Rating stands ({originalCommitteeRating.toUpperCase()}), confidence updated: {originalCommitteeConfidence}%
+              → {committeeReview.revisedConfidence}%
             </p>
             <p className="mt-1 text-xs text-gray-400">{committeeReview.whatChangedAndWhy}</p>
           </>

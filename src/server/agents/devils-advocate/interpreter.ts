@@ -16,7 +16,7 @@ const FETCH_TIMEOUT_MS = 150_000; // raised now that Vercel Pro allows much long
 
 const SYSTEM_PROMPT = `You are the Devil's Advocate inside a stock research application, built for people who know very little about investing. Your job is to challenge the Investment Committee's conclusion -- NOT to be automatically bearish. Your real question is: "why might our current conclusion be wrong?"
 
-You will receive: the same real compact summaries of 8 analyses (technical, fundamental, valuation, sentiment, macro, competitor, management, risk) the Committee used, the Committee's actual rating/confidence/vote tally/agreements/disagreements, and the Forecasting Agent's actual 12-month bear/base/bull scenario data (prices, probabilities, expected price, expected return, confidence).
+You will receive: the stock's real current price, the same real compact summaries of 8 analyses (technical, fundamental, valuation, sentiment, macro, competitor, management, risk) the Committee used, the Committee's actual rating/confidence/vote tally/agreements/disagreements, and the Forecasting Agent's actual 12-month bear/base/bull scenario data (prices, probabilities, expected price, expected return, confidence). If you reference "today's price" or "the current price" anywhere in your output, you MUST use the exact currentPrice value given to you -- never a different figure recalled from general knowledge or inferred from another field.
 
 CRITICAL RULES:
 1. Actively search for weaknesses -- overlooked evidence, questionable assumptions, overconfidence, contradictions between the analyses, and whether good news might already be priced into the stock. If the case for the current conclusion is genuinely strong, say so honestly (a low challenge score is a legitimate, correct output) -- but don't default to a lukewarm, generic critique either.
@@ -24,7 +24,11 @@ CRITICAL RULES:
 3. NEVER invent evidence, statistics, or events. Every weakness and alternative interpretation must be grounded in the real summaries and real Committee/Forecast data given to you.
 4. overallChallengeScore (0-100) measures how strongly the CURRENT THESIS should be challenged -- it is NOT a bearish score. A stock with a well-supported bullish thesis and a stock with a well-supported bearish thesis can both score low here if the evidence genuinely supports the conclusion; a thesis (bullish OR bearish) built on weak or contradictory evidence should score high.
 5. Reduce your stated confidence concerns when: data is incomplete (note which analyses were unavailable), analysts genuinely disagreed, the valuation depends on aggressive assumptions, or the situation is inherently hard to forecast. Do not let the output sound more certain than the evidence supports.
-6. couldThisChangeTheRating and the committeeReview fields: only propose a revision to the rating/confidence when your critique genuinely justifies it -- do NOT automatically soften or change the conclusion. If your critique is real but not strong enough to flip the rating, say so (wasThesisRevised: false) and explain why the original conclusion still stands despite the weaknesses you found.
+6. couldThisChangeTheRating and the committeeReview fields: only propose a revision to the rating and/or confidence when your critique genuinely justifies it -- do NOT automatically soften or change the conclusion. The rating (buy/hold/sell) and the confidence score are revised INDEPENDENTLY:
+   - Set wasThesisRevised: true only if your critique justifies changing the buy/hold/sell rating itself.
+   - Separately, set wasConfidenceRevised: true if your critique justifies a different confidence number than the Committee's -- even when the rating itself should stay the same. This matters most when the Committee's stated confidence looks overstated relative to how close the underlying vote was, how much data was missing, or how weak the winning argument actually is.
+   - It is entirely possible for wasConfidenceRevised to be true while wasThesisRevised is false (rating stands, confidence adjusted), or for both to be false (nothing changes), or for both to be true (a full revision). It is NOT valid for wasThesisRevised to be true while wasConfidenceRevised is false -- a rating change always carries a confidence figure with it.
+   - If neither is justified, say so (wasThesisRevised: false, wasConfidenceRevised: false) and explain why the original conclusion stands despite the weaknesses you found.
 7. Write every explanation in plain, everyday language a person with no investing background can understand. Whenever you'd use a term like "terminal growth assumption" or "priced in", explain what it means in the same or next sentence, in the plain style already used elsewhere in this app.
 
 CRITICAL JSON FORMATTING RULE: never place a double-quote character (") inside any string value, including to quote a term or phrase for emphasis (e.g. do NOT write "the \"base case\" scenario" -- write "the base case scenario" instead, with no quotation marks around it at all). A single unescaped internal quote breaks the entire response. If you want to emphasize or name a specific term, write it plainly without surrounding punctuation marks that could be mistaken for a string delimiter.
@@ -46,9 +50,10 @@ Respond with ONLY a single JSON object, no markdown code fences, no prose before
   "finalConclusion": "2-5 plain-language sentences",
   "committeeReview": {
     "wasThesisRevised": boolean,
-    "revisedRating": "buy" | "hold" | "sell" or null (null if wasThesisRevised is false),
-    "revisedConfidence": integer 0-100 or null (null if wasThesisRevised is false),
-    "whatChangedAndWhy": "plain-language explanation, or null if wasThesisRevised is false"
+    "revisedRating": "buy" | "hold" | "sell" or null (null unless wasThesisRevised is true),
+    "wasConfidenceRevised": boolean (independent of wasThesisRevised -- true whenever you believe the confidence score should change, even if the rating itself should not),
+    "revisedConfidence": integer 0-100 or null (required whenever wasThesisRevised OR wasConfidenceRevised is true; null only when both are false),
+    "whatChangedAndWhy": "plain-language explanation, required whenever wasThesisRevised OR wasConfidenceRevised is true, otherwise null"
   }
 }`;
 
@@ -73,17 +78,26 @@ const CommitteeReviewSchema = z
   .object({
     wasThesisRevised: z.boolean(),
     revisedRating: z.enum(["buy", "hold", "sell"]).nullable(),
+    wasConfidenceRevised: z.boolean(),
     revisedConfidence: z.number().min(0).max(100).nullable(),
     whatChangedAndWhy: z.string().nullable(),
   })
   .refine(
-    (v) =>
-      v.wasThesisRevised
-        ? v.revisedRating !== null && v.revisedConfidence !== null && v.whatChangedAndWhy !== null
-        : v.revisedRating === null && v.revisedConfidence === null,
+    (v) => {
+      // A rating revision always carries its own confidence figure.
+      if (v.wasThesisRevised) {
+        return v.revisedRating !== null && v.revisedConfidence !== null && v.whatChangedAndWhy !== null;
+      }
+      // Confidence can be revised on its own, with the rating unchanged.
+      if (v.wasConfidenceRevised) {
+        return v.revisedRating === null && v.revisedConfidence !== null && v.whatChangedAndWhy !== null;
+      }
+      // Nothing revised -- both null.
+      return v.revisedRating === null && v.revisedConfidence === null;
+    },
     {
       message:
-        "revisedRating/revisedConfidence/whatChangedAndWhy must be non-null when wasThesisRevised is true, and revisedRating/revisedConfidence must be null when wasThesisRevised is false",
+        "revisedRating must be non-null only when wasThesisRevised is true; revisedConfidence and whatChangedAndWhy must be non-null whenever wasThesisRevised OR wasConfidenceRevised is true, and null when both are false",
     }
   );
 
@@ -107,6 +121,7 @@ const ResponseSchema = z.object({
 export interface DevilsAdvocateInterpreterInput extends AnalysisSummaries {
   ticker: string;
   companyName: string | null;
+  currentPrice: number;
   committee: {
     finalRecommendation: CommitteeInterpretation["finalRecommendation"];
     finalConfidence: number;

@@ -1,5 +1,5 @@
 import type { CommitteeRecommendation } from "@/lib/investment-committee-types";
-import type { ScenarioOutcome } from "@/lib/forecast-types";
+import type { ForecastHorizonKey, ScenarioOutcome } from "@/lib/forecast-types";
 import type { ValuationRating } from "@/lib/valuation-types";
 import type { OverallMacroEnvironment } from "@/lib/macro-types";
 import type { SentimentDirection, SentimentTrend } from "@/lib/sentiment-types";
@@ -31,6 +31,11 @@ export interface QuickAnswer {
   currentPrice: number;
   expectedPrice: number;
   expectedReturnPct: number;
+  /** Which forecast horizon expectedPrice/expectedReturnPct above are for
+   * -- always "12_month" today, but made explicit (rather than left
+   * implicit) so the UI can label the figure instead of showing an
+   * unlabeled percentage. */
+  expectedReturnHorizon: ForecastHorizonKey;
   confidenceScore: number; // 0..100
   explanation: string; // reused verbatim from an existing agent's real conclusion text
 }
@@ -39,6 +44,16 @@ export interface BearBaseBull {
   bear: ScenarioOutcome;
   base: ScenarioOutcome;
   bull: ScenarioOutcome;
+  expectedPrice: number;
+  expectedReturnPct: number;
+}
+
+/** One forecast horizon's expected price/return, reused verbatim from the
+ * Forecasting Agent's already-computed (never re-derived) figures --
+ * lets the report show 3/6/12-month expected returns side by side
+ * instead of only the 12-month figure. */
+export interface HorizonReturn {
+  horizon: ForecastHorizonKey;
   expectedPrice: number;
   expectedReturnPct: number;
 }
@@ -112,6 +127,9 @@ export interface FinalConclusion {
   rating: CommitteeRecommendation;
   confidenceScore: number;
   expectedReturnPct: number;
+  /** See QuickAnswer.expectedReturnHorizon -- same reasoning, kept
+   * explicit here too since this section repeats the figure. */
+  expectedReturnHorizon: ForecastHorizonKey;
 }
 
 export interface ReportSource {
@@ -137,6 +155,10 @@ export interface FinalReportResult {
   whyAiLikesIt: string[];
   whyAiIsWorried: string[];
   bearBaseBull: BearBaseBull;
+  /** All three forecast horizons (3/6/12-month) expected return, so the
+   * report isn't limited to showing only the 12-month figure used
+   * elsewhere in this object. */
+  forecastHorizons: HorizonReturn[];
   businessQuality: BusinessQuality;
   valuation: ValuationSummary;
   whatsHappeningNow: WhatsHappeningNow;

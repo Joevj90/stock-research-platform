@@ -55,9 +55,9 @@ export async function runInvestmentCommittee(
     };
   }
 
-  const { companyName, inputsUsed, summaries } = gathered;
+  const { companyName, currentPrice, inputsUsed, summaries } = gathered;
 
-  const personasResult = await interpretPersonas({ ticker, companyName, ...summaries });
+  const personasResult = await interpretPersonas({ ticker, companyName, currentPrice, ...summaries });
   if (!personasResult.ok) {
     log.warn("committee evidence gathered but personas phase failed", { ticker, error: personasResult.error });
     return personasResult;
@@ -69,6 +69,7 @@ export async function runInvestmentCommittee(
   const debateResult = await interpretDebate({
     ticker,
     companyName,
+    currentPrice,
     personaEvaluations,
     ...summaries,
   });

@@ -9,6 +9,7 @@ function persona(p: PersonaEvaluation["persona"], recommendation: PersonaEvaluat
 const SAMPLE_INPUT: DebateInterpreterInput = {
   ticker: "AAPL",
   companyName: "Apple Inc.",
+  currentPrice: 220,
   personaEvaluations: [
     persona("value_investor", "hold"),
     persona("growth_investor", "buy"),

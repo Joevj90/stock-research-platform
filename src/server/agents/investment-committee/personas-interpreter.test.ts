@@ -4,6 +4,7 @@ import type { PersonasInterpreterInput } from "./personas-interpreter";
 const SAMPLE_INPUT: PersonasInterpreterInput = {
   ticker: "AAPL",
   companyName: "Apple Inc.",
+  currentPrice: 220,
   valuationDcfEstimates: { bearFairValue: 150, baseFairValue: 210, bullFairValue: 280 },
   technicalSummary: { trend: "uptrend", momentum: "bullish", technicalScore: 40, explanation: "x" },
   fundamentalSummary: { overallFundamentalScore: 50, overallConclusion: "x" },

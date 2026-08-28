@@ -4,6 +4,7 @@ import type { DevilsAdvocateInterpreterInput } from "./interpreter";
 const SAMPLE_INPUT: DevilsAdvocateInterpreterInput = {
   ticker: "AAPL",
   companyName: "Apple Inc.",
+  currentPrice: 220,
   valuationDcfEstimates: { bearFairValue: 150, baseFairValue: 210, bullFairValue: 280 },
   technicalSummary: { trend: "uptrend", momentum: "bullish", technicalScore: 40, explanation: "x" },
   fundamentalSummary: { overallFundamentalScore: 50, overallConclusion: "x" },
@@ -68,7 +69,7 @@ function validPayload(overrides: Record<string, unknown> = {}) {
     whyChangeOrNot: "The weaknesses are real but not severe enough alone.",
     recommendedChanges: ["Lower confidence slightly"],
     finalConclusion: "The thesis has some real weaknesses but is not fundamentally undermined.",
-    committeeReview: { wasThesisRevised: false, revisedRating: null, revisedConfidence: null, whatChangedAndWhy: null },
+    committeeReview: { wasThesisRevised: false, revisedRating: null, wasConfidenceRevised: false, revisedConfidence: null, whatChangedAndWhy: null },
     ...overrides,
   };
 }
@@ -99,6 +100,7 @@ describe("interpretDevilsAdvocate", () => {
     if (result.ok) {
       expect(result.data.interpretation.source).toBe("ai");
       expect(result.data.committeeReview.wasThesisRevised).toBe(false);
+      expect(result.data.committeeReview.wasConfidenceRevised).toBe(false);
     }
   });
 
@@ -114,6 +116,7 @@ describe("interpretDevilsAdvocate", () => {
             committeeReview: {
               wasThesisRevised: true,
               revisedRating: "hold",
+              wasConfidenceRevised: true,
               revisedConfidence: 50,
               whatChangedAndWhy: "The weaknesses were severe enough to lower conviction.",
             },
@@ -130,6 +133,37 @@ describe("interpretDevilsAdvocate", () => {
     }
   });
 
+  it("accepts a confidence-only revision that leaves the rating unchanged", async () => {
+    vi.doMock("@/server/config/env", () => ({ env: { ANTHROPIC_API_KEY: "test-key" } }));
+    const { interpretDevilsAdvocate } = await import("./interpreter");
+
+    mockAnthropicResponse(
+      200,
+      anthropicTextResponse(
+        JSON.stringify(
+          validPayload({
+            committeeReview: {
+              wasThesisRevised: false,
+              revisedRating: null,
+              wasConfidenceRevised: true,
+              revisedConfidence: 55,
+              whatChangedAndWhy: "The vote was nearly tied, so the original confidence looked overstated.",
+            },
+          })
+        )
+      )
+    );
+
+    const result = await interpretDevilsAdvocate(SAMPLE_INPUT);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.committeeReview.wasThesisRevised).toBe(false);
+      expect(result.data.committeeReview.revisedRating).toBeNull();
+      expect(result.data.committeeReview.wasConfidenceRevised).toBe(true);
+      expect(result.data.committeeReview.revisedConfidence).toBe(55);
+    }
+  });
+
   it("rejects a response where wasThesisRevised is true but revisedRating is null (inconsistent)", async () => {
     vi.doMock("@/server/config/env", () => ({ env: { ANTHROPIC_API_KEY: "test-key" } }));
     const { interpretDevilsAdvocate } = await import("./interpreter");
@@ -139,7 +173,7 @@ describe("interpretDevilsAdvocate", () => {
       anthropicTextResponse(
         JSON.stringify(
           validPayload({
-            committeeReview: { wasThesisRevised: true, revisedRating: null, revisedConfidence: null, whatChangedAndWhy: null },
+            committeeReview: { wasThesisRevised: true, revisedRating: null, wasConfidenceRevised: true, revisedConfidence: null, whatChangedAndWhy: null },
           })
         )
       )
@@ -159,7 +193,7 @@ describe("interpretDevilsAdvocate", () => {
       anthropicTextResponse(
         JSON.stringify(
           validPayload({
-            committeeReview: { wasThesisRevised: false, revisedRating: "sell", revisedConfidence: 40, whatChangedAndWhy: "x" },
+            committeeReview: { wasThesisRevised: false, revisedRating: "sell", wasConfidenceRevised: true, revisedConfidence: 40, whatChangedAndWhy: "x" },
           })
         )
       )
