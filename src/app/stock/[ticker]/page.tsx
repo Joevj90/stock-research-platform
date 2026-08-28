@@ -4,6 +4,7 @@ import { TickerSearch } from "@/components/TickerSearch";
 import { StockChart } from "@/components/StockChart";
 import { MockDataBanner } from "@/components/MockDataBanner";
 import { PeriodSelector } from "@/components/PeriodSelector";
+import { CollapsibleSection } from "@/components/CollapsibleSection";
 import { TechnicalAnalysisPanel } from "@/components/TechnicalAnalysisPanel";
 import { FundamentalsPanel } from "@/components/FundamentalsPanel";
 import { FundamentalAnalystPanel } from "@/components/FundamentalAnalystPanel";
@@ -114,37 +115,63 @@ function DashboardContent({ snapshot }: { snapshot: StockSnapshot }) {
         </p>
       </section>
 
-      <TechnicalAnalysisPanel ticker={ticker} period={period} />
-
-      <FundamentalsPanel ticker={ticker} />
-
-      <FundamentalAnalystPanel ticker={ticker} periodType="annual" />
-
-      <NewsIntelligencePanel ticker={ticker} />
-
-      <ValuationPanel ticker={ticker} />
-
-      <SentimentPanel ticker={ticker} />
-
-      <MacroAnalysisPanel ticker={ticker} />
-
-      <CompetitorAnalysisPanel ticker={ticker} />
-
-      <ManagementAnalysisPanel ticker={ticker} />
-
-      <RiskAnalystPanel ticker={ticker} />
-
-      <ForecastPanel ticker={ticker} />
-
-      <InvestmentCommitteePanel ticker={ticker} />
-
-      <DevilsAdvocatePanel ticker={ticker} />
-
       <FinalReportPanel ticker={ticker} />
+
+      <AnalysisHistoryPanel ticker={ticker} />
 
       <PredictionAccuracyPanel ticker={ticker} />
 
-      <AnalysisHistoryPanel ticker={ticker} />
+      <section>
+        <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-gray-500">
+          Detailed Analyst Reports
+        </h2>
+        <p className="mb-3 text-xs text-gray-500">
+          The Final AI Investment Report above already reflects everything below — these are the
+          individual analyses behind it, for anyone who wants to inspect the work directly. Each one
+          can also be run on its own.
+        </p>
+        <div className="flex flex-col gap-2">
+          <CollapsibleSection title="Technical Analysis">
+            <TechnicalAnalysisPanel ticker={ticker} period={period} />
+          </CollapsibleSection>
+          <CollapsibleSection title="Fundamentals (Raw Financial Data)">
+            <FundamentalsPanel ticker={ticker} />
+          </CollapsibleSection>
+          <CollapsibleSection title="Fundamental Analyst">
+            <FundamentalAnalystPanel ticker={ticker} periodType="annual" />
+          </CollapsibleSection>
+          <CollapsibleSection title="News Intelligence">
+            <NewsIntelligencePanel ticker={ticker} />
+          </CollapsibleSection>
+          <CollapsibleSection title="Valuation">
+            <ValuationPanel ticker={ticker} />
+          </CollapsibleSection>
+          <CollapsibleSection title="Sentiment Analysis">
+            <SentimentPanel ticker={ticker} />
+          </CollapsibleSection>
+          <CollapsibleSection title="Macro Analysis">
+            <MacroAnalysisPanel ticker={ticker} />
+          </CollapsibleSection>
+          <CollapsibleSection title="Competitor Analysis">
+            <CompetitorAnalysisPanel ticker={ticker} />
+          </CollapsibleSection>
+          <CollapsibleSection title="Management Analysis">
+            <ManagementAnalysisPanel ticker={ticker} />
+          </CollapsibleSection>
+          <CollapsibleSection title="Risk Analyst">
+            <RiskAnalystPanel ticker={ticker} />
+          </CollapsibleSection>
+          <CollapsibleSection title="Forecast">
+            <ForecastPanel ticker={ticker} />
+          </CollapsibleSection>
+          <CollapsibleSection title="Investment Committee">
+            <InvestmentCommitteePanel ticker={ticker} />
+          </CollapsibleSection>
+          <CollapsibleSection title="Devil's Advocate">
+            <DevilsAdvocatePanel ticker={ticker} />
+          </CollapsibleSection>
+        </div>
+      </section>
 
       <section>
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-gray-500">

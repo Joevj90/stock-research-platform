@@ -5,7 +5,7 @@ import type {
 } from "@/lib/investment-committee-types";
 import type { FinalReportResult, QualityLabel } from "@/lib/final-report-types";
 import type { ScenarioOutcome } from "@/lib/forecast-types";
-import { useFinalReportGeneration, FINAL_REPORT_STEPS } from "@/hooks/useFinalReportGeneration";
+import { useFinalReportGeneration, FINAL_REPORT_STEPS, GATHER_SUB_STEPS } from "@/hooks/useFinalReportGeneration";
 
 const STEPS = FINAL_REPORT_STEPS;
 
@@ -66,7 +66,7 @@ export function FinalReportPanel({ ticker }: { ticker: string }) {
           disabled={state.status === "loading"}
           className="rounded-md bg-accent px-4 py-2 text-xs font-medium text-white transition hover:bg-blue-500 disabled:opacity-50"
         >
-          {state.status === "loading" ? "Building full report…" : "Generate Final Report"}
+          {state.status === "loading" ? "Analyzing…" : "Analyze Stock"}
         </button>
       </div>
 
@@ -84,7 +84,7 @@ export function FinalReportPanel({ ticker }: { ticker: string }) {
           <StepProgress currentStepIndex={state.failedStepIndex} failedStepIndex={state.failedStepIndex} />
           <p className="mt-2 text-sm text-red-400">{state.message}</p>
           <p className="mt-1 text-xs text-gray-500">
-            Clicking &quot;Generate Final Report&quot; will start over from the first step.
+            Clicking &quot;Analyze Stock&quot; will start over from the first step.
           </p>
         </div>
       )}
@@ -365,6 +365,14 @@ export function StepProgress({
           </div>
         );
       })}
+      {/* "Gathering all analyses" is step 0 -- show what it covers while it's active or if it's the step that failed. */}
+      {(currentStepIndex === 0 || failedStepIndex === 0) && (
+        <div className="ml-5 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-gray-600">
+          {GATHER_SUB_STEPS.map((s) => (
+            <span key={s}>{s}</span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

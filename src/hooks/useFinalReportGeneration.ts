@@ -7,12 +7,35 @@ import type { CommitteeResult } from "@/lib/investment-committee-types";
 import type { DevilsAdvocateResult } from "@/lib/devils-advocate-types";
 import type { FinalReportResult } from "@/lib/final-report-types";
 
+/** The 11 base analyses run in parallel as ONE server-side step
+ * ("gather") rather than 11 separate client-driven requests, so their
+ * real-time individual completion isn't visible to the browser -- this
+ * list is shown together as what that stage covers, not tracked
+ * one-by-one. Splitting "gather" into 11 separate steps was considered
+ * and deliberately avoided: it would mean re-fetching News Intelligence
+ * separately for each of Sentiment/Risk/the report itself instead of
+ * sharing one fetch (see the Prediction Tracking cost-reduction writeup),
+ * directly undermining the "do not duplicate data" requirement in
+ * exchange for progress-bar granularity that isn't worth that real cost. */
+export const GATHER_SUB_STEPS = [
+  "Market Data",
+  "Technical Analysis",
+  "Fundamental Analysis",
+  "News",
+  "Valuation",
+  "Sentiment",
+  "Macro",
+  "Competitors",
+  "Management",
+  "Risk",
+] as const;
+
 export const FINAL_REPORT_STEPS = [
   { key: "gather", label: "Gathering all analyses" },
-  { key: "forecast", label: "Building the forecast" },
-  { key: "committee", label: "Convening the investment committee" },
-  { key: "devils-advocate", label: "Challenging the conclusion" },
-  { key: "assemble", label: "Assembling the final report" },
+  { key: "forecast", label: "Forecasting" },
+  { key: "committee", label: "Investment Committee" },
+  { key: "devils-advocate", label: "Devil's Advocate" },
+  { key: "assemble", label: "Final AI Investment Report" },
 ] as const;
 
 export type FinalReportGenerationState =

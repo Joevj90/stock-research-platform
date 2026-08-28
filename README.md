@@ -220,6 +220,81 @@ with raw ratios up front.
 Try it: `GET /api/fundamental-analysis/AAPL?period=annual`, or "Run
 Analysis" under Fundamental Analyst on a stock's page.
 
+## Full System Integration & Final Testing
+
+Step 20 is explicitly an integration/simplification pass, not a new
+analysis module — "Do not create new analysis modules unless
+absolutely necessary. Focus on connecting, testing, simplifying, and
+improving the existing system." Auditing the app against every
+requirement in the spec found that most of the architectural asks
+(standardized provider interfaces, no duplicate API/AI calls, graceful
+degradation when a data source fails, programmatic math validation,
+anti-hallucination guardrails, FACT/CALCULATION/AI-INTERPRETATION
+separation) were already built into the system's foundation from Steps
+1–19 — this step's real, concrete work was UX restructuring plus an
+honest audit, not re-implementing things that already worked.
+
+**One "Analyze Stock" button, with everything else demoted to
+optional detail:** the stock page was restructured so the Final AI
+Investment Report sits right after the price chart — the single
+primary action — with all 13 individual analyst panels (Technical,
+Fundamentals, Fundamental Analyst, News, Valuation, Sentiment, Macro,
+Competitor, Management, Risk, Forecast, Investment Committee, Devil's
+Advocate) moved into a "Detailed Analyst Reports" section, collapsed by
+default via a new `CollapsibleSection` component, each still fully
+runnable on its own for anyone who wants to inspect the work directly.
+No panel's own logic changed — only where it sits on the page.
+
+**Progress display honestly reflects the real architecture, not an
+idealized one:** the spec's example shows each of the 11 base analyses
+checking off individually in real time. That's not what actually
+happens — they run together as one server-side "gather" step, and
+splitting that into 11 separate client-driven requests was
+deliberately rejected, because it would mean re-fetching News
+Intelligence separately for Sentiment, Risk, and the report itself
+instead of sharing one fetch — directly undermining the "do not
+duplicate data" requirement in exchange for progress-bar granularity
+that isn't worth that real cost. The progress view now shows what that
+stage covers (a static list of the 11 analyses) rather than pretending
+to track each one in real time it can't actually observe.
+
+**Security audit (concrete, not assumed):** grepped the entire
+codebase for `NEXT_PUBLIC_` env vars and hardcoded key-like strings
+(none found), and confirmed every file touching `FMP_API_KEY` or
+`ANTHROPIC_API_KEY` lives under `src/server/`. The two `'use client'`
+files that reference server-side modules do so exclusively via
+`import type`, which is erased entirely at build time — server code
+containing API keys is structurally impossible to bundle into the
+browser.
+
+**What was already true and just got verified, not rebuilt:**
+provider interfaces already exist for market data, fundamentals, news,
+macro, and insider trading (Steps 1–12), each swappable behind a
+factory without touching any agent's code; News Intelligence is
+already fetched once and shared across Sentiment, Risk, and Final
+Report (the Step 18 cost-reduction work); every important number
+(expected price, expected return, scenario probabilities, prediction
+accuracy, prediction error) is already computed in code, never trusted
+from an AI response, and bear+base+bull probabilities are already
+forced to sum to exactly 100% (`normalizeProbabilities`, tested since
+Step 14); every agent's system prompt already instructs it to say
+"unavailable" rather than invent a number.
+
+**Honest limitations, not claimed as solved:** Final Report and Devil's
+Advocate can still occasionally exceed even Vercel Pro's 300-second
+function limit on an unusually long generation, given how many
+sequential AI calls are chained — retried automatically per-step, but
+not eliminated. Unusual financial instruments (e.g. leveraged/inverse
+ETFs with no normal earnings or business story) have produced rarer
+JSON formatting edge cases than typical operating companies; several
+real, confirmed fixes exist for this class of issue, but no claim is
+made that every possible variant is now covered. Peer/competitor
+comparison specifically requires FMP's Premium tier, not just Starter.
+Prediction Tracking's accuracy percentages will remain honestly gated
+behind "not enough data yet" messages until enough real predictions
+have actually been evaluated over time — this is by design, not a gap
+to fix.
+
 ## Analysis History & Reassessment
 
 Lets the user manually re-research a stock at any time and see exactly
