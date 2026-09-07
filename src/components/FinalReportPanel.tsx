@@ -38,6 +38,8 @@ const ENV_LABEL: Record<string, { label: string; color: string }> = {
 };
 
 const HORIZON_LABEL: Record<ForecastHorizonKey, string> = {
+  "1_week": "1-Week",
+  "1_month": "1-Month",
   "3_month": "3-Month",
   "6_month": "6-Month",
   "12_month": "12-Month",
@@ -433,13 +435,13 @@ function ScenarioCard({ scenario }: { scenario: ScenarioOutcome }) {
  * order regardless of the order the API returned them in.
  */
 function HorizonReturnRow({ horizons }: { horizons: HorizonReturn[] }) {
-  const order: ForecastHorizonKey[] = ["3_month", "6_month", "12_month"];
+  const order: ForecastHorizonKey[] = ["1_week", "1_month", "3_month", "6_month", "12_month"];
   const byHorizon = new Map(horizons.map((h) => [h.horizon, h]));
 
   if (horizons.length === 0) return null;
 
   return (
-    <div className="mt-4 grid grid-cols-3 gap-2">
+    <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-5">
       {order.map((key) => {
         const h = byHorizon.get(key);
         if (!h) return null;

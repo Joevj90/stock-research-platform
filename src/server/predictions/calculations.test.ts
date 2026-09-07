@@ -148,9 +148,17 @@ describe("deriveFiveWayRating", () => {
 describe("computeEvaluationDueDate", () => {
   it("adds the correct number of months for each horizon", () => {
     const start = new Date("2026-01-15T00:00:00.000Z");
+    expect(computeEvaluationDueDate(start, "1_month").getUTCMonth()).toBe(1); // February
     expect(computeEvaluationDueDate(start, "3_month").getUTCMonth()).toBe(3); // April (0-indexed)
     expect(computeEvaluationDueDate(start, "6_month").getUTCMonth()).toBe(6); // July
     expect(computeEvaluationDueDate(start, "12_month").getUTCFullYear()).toBe(2027);
+  });
+
+  it("adds exactly 7 days for the 1-week horizon", () => {
+    const start = new Date("2026-01-15T00:00:00.000Z");
+    const due = computeEvaluationDueDate(start, "1_week");
+    expect(due.getUTCDate()).toBe(22);
+    expect(due.getUTCMonth()).toBe(0); // still January
   });
 });
 

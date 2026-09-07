@@ -51,7 +51,13 @@ function validHorizon(horizon: string) {
 
 function validPayload(overrides: Record<string, unknown> = {}) {
   return {
-    horizons: [validHorizon("3_month"), validHorizon("6_month"), validHorizon("12_month")],
+    horizons: [
+      validHorizon("1_week"),
+      validHorizon("1_month"),
+      validHorizon("3_month"),
+      validHorizon("6_month"),
+      validHorizon("12_month"),
+    ],
     keyCatalysts: [{ whatCouldHappen: "x", whyItWouldHelp: "y", importance: "medium" }],
     keyRisksSummary: ["summary risk"],
     confidenceScore: 65,
@@ -79,7 +85,7 @@ describe("interpretForecast", () => {
     if (!result.ok) expect(result.error.code).toBe("AI_NOT_CONFIGURED");
   });
 
-  it("parses a valid, well-formed response with exactly 3 horizons", async () => {
+  it("parses a valid, well-formed response with exactly 5 horizons", async () => {
     vi.doMock("@/server/config/env", () => ({ env: { ANTHROPIC_API_KEY: "test-key" } }));
     const { interpretForecast } = await import("./interpreter");
 
@@ -89,12 +95,12 @@ describe("interpretForecast", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.data.source).toBe("ai");
-      expect(result.data.horizons).toHaveLength(3);
-      expect(result.data.horizons.map((h) => h.horizon)).toEqual(["3_month", "6_month", "12_month"]);
+      expect(result.data.horizons).toHaveLength(5);
+      expect(result.data.horizons.map((h) => h.horizon)).toEqual(["1_week", "1_month", "3_month", "6_month", "12_month"]);
     }
   });
 
-  it("rejects a response with fewer than 3 horizons", async () => {
+  it("rejects a response with fewer than 5 horizons", async () => {
     vi.doMock("@/server/config/env", () => ({ env: { ANTHROPIC_API_KEY: "test-key" } }));
     const { interpretForecast } = await import("./interpreter");
 
@@ -124,7 +130,13 @@ describe("interpretForecast", () => {
     (badHorizon.bear as { priceTarget: number }).priceTarget = -10;
     mockAnthropicResponse(
       200,
-      anthropicTextResponse(JSON.stringify(validPayload({ horizons: [badHorizon, validHorizon("6_month"), validHorizon("12_month")] })))
+      anthropicTextResponse(
+        JSON.stringify(
+          validPayload({
+            horizons: [validHorizon("1_week"), validHorizon("1_month"), badHorizon, validHorizon("6_month"), validHorizon("12_month")],
+          })
+        )
+      )
     );
 
     const result = await interpretForecast(SAMPLE_INPUT);

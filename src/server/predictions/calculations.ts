@@ -88,7 +88,11 @@ export function deriveFiveWayRating(expectedReturnPct: number, confidenceScore: 
 
 export function computeEvaluationDueDate(predictionDate: Date, horizon: ForecastHorizonKey): Date {
   const due = new Date(predictionDate);
-  const monthsToAdd = horizon === "3_month" ? 3 : horizon === "6_month" ? 6 : 12;
+  if (horizon === "1_week") {
+    due.setDate(due.getDate() + 7);
+    return due;
+  }
+  const monthsToAdd = horizon === "1_month" ? 1 : horizon === "3_month" ? 3 : horizon === "6_month" ? 6 : 12;
   due.setMonth(due.getMonth() + monthsToAdd);
   return due;
 }
@@ -110,7 +114,7 @@ function average(values: number[]): number | null {
 
 export function computeAccuracyByHorizon(
   predictions: PredictionRecord[],
-  horizons: ForecastHorizonKey[] = ["3_month", "6_month", "12_month"]
+  horizons: ForecastHorizonKey[] = ["1_week", "1_month", "3_month", "6_month", "12_month"]
 ): HorizonAccuracy[] {
   return horizons.map((horizon) => {
     const evaluated = evaluatedOnly(predictions).filter((p) => p.horizon === horizon);

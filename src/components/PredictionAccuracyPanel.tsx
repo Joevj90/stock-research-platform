@@ -17,6 +17,8 @@ type DashboardState =
   | { status: "success"; data: AccuracyDashboard };
 
 const HORIZON_LABEL: Record<ForecastHorizonKey, string> = {
+  "1_week": "1 Week",
+  "1_month": "1 Month",
   "3_month": "3 Months",
   "6_month": "6 Months",
   "12_month": "12 Months",

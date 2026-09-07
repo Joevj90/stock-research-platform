@@ -16,13 +16,14 @@ const SYSTEM_PROMPT = `You are the Forecasting Agent inside a stock research app
 You will receive a JSON object with the current price, real deterministic DCF fair-value estimates (bear/base/bull) from the app's own Valuation Engine, and compact summaries of whatever other analyses were successfully run for this company (technical, fundamental, sentiment, macro, competitor, management, risk -- each may be missing if that analysis wasn't available, in which case treat it as unavailable rather than guessing what it would have said).
 
 CRITICAL RULES:
-1. NEVER invent financial information. Every scenario narrative must be grounded in the real summaries and DCF estimates you were given. If you don't have enough input for a specific horizon (3/6/12 month) to produce a credible forecast, set dataSupportsThisHorizon to false and explain why in limitationNote -- do not force a confident-sounding forecast the evidence doesn't support.
+1. NEVER invent financial information. Every scenario narrative must be grounded in the real summaries and DCF estimates you were given. If you don't have enough input for a specific horizon (1 week/1 month/3 month/6 month/12 month) to produce a credible forecast, set dataSupportsThisHorizon to false and explain why in limitationNote -- do not force a confident-sounding forecast the evidence doesn't support.
 2. For EACH horizon, provide a priceTarget and probabilityPct for bear, base, and bull. You do NOT need to make bear+base+bull probabilities sum to exactly 100 -- the application will normalize them deterministically. Just give your best relative judgment (e.g. base case is much more likely than bear/bull).
 3. Do NOT perform the expected-price or expected-return math yourself -- the application calculates those deterministically from your price targets and probabilities. Just provide the scenario prices and probabilities.
-4. Use the real DCF bear/base/bull fair values given to you as a strong anchor for your price targets, adjusted by the other real evidence (technical trend, sentiment, macro conditions, competitive position, management execution, and risk level) you were given.
-5. confidenceScore (0-100) does NOT mean "how sure are we of the exact price" -- it reflects how RELIABLE the overall forecast is, based on: how much real data was available, how much the different analyses agree with each other, business stability, and valuation/macro/company-specific uncertainty. Disagreement between analyses or missing data should lower this score -- but when the data is comprehensive and the analyses genuinely agree, say so with a real high score (80s-90s is fine when earned); don't reflexively cap it out of general caution when the evidence doesn't call for that.
-6. Write every explanation in plain, everyday language a person with no investing background can understand. Whenever you'd use a term like "multiple expansion" or "revenue deceleration", explain what it means in the same or next sentence, in the plain style already used elsewhere in this app.
-7. keyRisksSummary must be a SHORT summary of what matters most for this forecast, not a duplicate of a full risk analysis.
+4. Use the real DCF bear/base/bull fair values given to you as a strong anchor for your price targets on the 3/6/12-month horizons, adjusted by the other real evidence (technical trend, sentiment, macro conditions, competitive position, management execution, and risk level) you were given.
+5. The 1-week and 1-month horizons are DIFFERENT IN KIND from the 3/6/12-month horizons, not just shorter versions of them. Over a week or a month, short-term price action is dominated by trading noise, momentum, and near-term catalysts (e.g. an upcoming earnings date or product event already in the news summaries), not by the stock converging toward DCF fair value -- fundamental mispricing identified by a DCF model can easily persist or even widen over a single week or month even when the 12-month thesis is correct. For these two horizons: weight the technical/momentum summary and any near-term catalysts from the news summaries much more heavily than the DCF fair-value estimates, keep the bear/base/bull price range meaningfully narrower than the 3-month range (large short-term swings are the exception, not the norm), and be readier to set dataSupportsThisHorizon to false when there's no technical or near-term catalyst data available to anchor a short-term call -- do not simply interpolate a fraction of the 12-month move.
+6. confidenceScore (0-100) does NOT mean "how sure are we of the exact price" -- it reflects how RELIABLE the overall forecast is, based on: how much real data was available, how much the different analyses agree with each other, business stability, and valuation/macro/company-specific uncertainty. Disagreement between analyses or missing data should lower this score -- but when the data is comprehensive and the analyses genuinely agree, say so with a real high score (80s-90s is fine when earned); don't reflexively cap it out of general caution when the evidence doesn't call for that.
+7. Write every explanation in plain, everyday language a person with no investing background can understand. Whenever you'd use a term like "multiple expansion" or "revenue deceleration", explain what it means in the same or next sentence, in the plain style already used elsewhere in this app.
+8. keyRisksSummary must be a SHORT summary of what matters most for this forecast, not a duplicate of a full risk analysis.
 
 CRITICAL JSON FORMATTING RULE: never place a double-quote character (") inside any string value, including to quote a term or phrase for emphasis (e.g. do NOT write "the \"base case\" scenario" -- write "the base case scenario" instead, with no quotation marks around it at all). A single unescaped internal quote breaks the entire response. If you want to emphasize or name a specific term, write it plainly without surrounding punctuation marks that could be mistaken for a string delimiter.
 
@@ -30,7 +31,7 @@ Respond with ONLY a single JSON object, no markdown code fences, no prose before
 {
   "horizons": [
     {
-      "horizon": "3_month",
+      "horizon": "1_week",
       "dataSupportsThisHorizon": boolean,
       "limitationNote": string or null (required, non-null, if dataSupportsThisHorizon is false),
       "bear": { "explanation": string, "estimatedFinancialOutcome": string, "priceTarget": number, "probabilityPct": number, "mainReasons": [up to 3 short strings], "keyRisks": [up to 3 short strings] },
@@ -38,20 +39,22 @@ Respond with ONLY a single JSON object, no markdown code fences, no prose before
       "bull": { same shape as bear },
       "mostLikelyScenario": "bear" | "base" | "bull"
     },
+    { "horizon": "1_month", ... same shape ... },
+    { "horizon": "3_month", ... same shape ... },
     { "horizon": "6_month", ... same shape ... },
     { "horizon": "12_month", ... same shape ... }
   ],
   "keyCatalysts": [ up to 4 items: { "whatCouldHappen": string, "whyItWouldHelp": string, "importance": "low"|"medium"|"high" } ],
   "keyRisksSummary": [ up to 4 short plain-language strings ],
   "confidenceScore": integer 0-100,
-  "confidenceExplanation": "plain-language explanation of the confidence score, per rule 5",
+  "confidenceExplanation": "plain-language explanation of the confidence score, per rule 6",
   "biggestOptimismReason": "plain-language, the single biggest reason for optimism",
   "biggestRiskReason": "plain-language, the single biggest risk",
   "assumptions": [ up to 5 items: { "assumption": "short label", "explanation": "plain-language explanation of what this assumption means" } ],
   "overallConclusion": "3-5 plain-language sentences, following the pattern: our most likely outcome is the Base Case, the biggest reason for optimism is X, the biggest risk is Y"
 }
 
-Provide exactly 3 horizon entries (3_month, 6_month, 12_month), in that order.`;
+Provide exactly 5 horizon entries (1_week, 1_month, 3_month, 6_month, 12_month), in that order.`;
 
 const ScenarioSchema = z.object({
   explanation: z.string().min(1),
@@ -63,7 +66,7 @@ const ScenarioSchema = z.object({
 });
 
 const HorizonSchema = z.object({
-  horizon: z.enum(["3_month", "6_month", "12_month"]),
+  horizon: z.enum(["1_week", "1_month", "3_month", "6_month", "12_month"]),
   dataSupportsThisHorizon: z.boolean(),
   limitationNote: z.string().nullable(),
   bear: ScenarioSchema,
@@ -81,7 +84,7 @@ const CatalystSchema = z.object({
 const AssumptionSchema = z.object({ assumption: z.string().min(1), explanation: z.string().min(1) });
 
 const InterpretationSchema = z.object({
-  horizons: z.array(HorizonSchema).length(3),
+  horizons: z.array(HorizonSchema).length(5),
   keyCatalysts: z.array(CatalystSchema),
   keyRisksSummary: z.array(z.string()),
   confidenceScore: z.number().min(0).max(100),

@@ -10,12 +10,14 @@ type State =
   | { status: "success"; data: ForecastResult };
 
 const HORIZON_LABEL: Record<ForecastHorizonKey, string> = {
+  "1_week": "1 Week",
+  "1_month": "1 Month",
   "3_month": "3 Months",
   "6_month": "6 Months",
   "12_month": "12 Months",
 };
 
-const HORIZON_ORDER: ForecastHorizonKey[] = ["3_month", "6_month", "12_month"];
+const HORIZON_ORDER: ForecastHorizonKey[] = ["1_week", "1_month", "3_month", "6_month", "12_month"];
 
 const INPUT_LABELS: { key: keyof ForecastResult["inputsUsed"]; label: string }[] = [
   { key: "technical", label: "Technical" },

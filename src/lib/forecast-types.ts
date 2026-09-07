@@ -24,7 +24,7 @@ import type { AnalysisInputsAvailability } from "@/server/agents/shared/analysis
  *                       confidence explanation -- tagged `source: "ai"`.
  */
 
-export type ForecastHorizonKey = "3_month" | "6_month" | "12_month";
+export type ForecastHorizonKey = "1_week" | "1_month" | "3_month" | "6_month" | "12_month";
 export type ScenarioName = "bear" | "base" | "bull";
 export type CatalystImportance = "low" | "medium" | "high";
 
