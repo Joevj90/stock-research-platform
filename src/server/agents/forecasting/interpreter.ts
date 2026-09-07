@@ -9,7 +9,7 @@ import { callAnthropicForText } from "@/server/agents/shared/call-anthropic";
 const log = logger.child("agents:forecasting:interpreter");
 
 const MODEL = "claude-sonnet-5";
-const FETCH_TIMEOUT_MS = 90_000; // raised now that Vercel Pro allows much longer function execution
+const FETCH_TIMEOUT_MS = 150_000; // raised from 90s -- 5 horizons (up from 3) means ~67% more content to generate per call
 
 const SYSTEM_PROMPT = `You are the Forecasting Agent inside a stock research application, built for people who know very little about investing. Your job is to combine evidence from multiple existing analyses into a forward-looking forecast -- you must NOT blindly trust any single analyst's conclusion.
 
@@ -135,7 +135,7 @@ export async function interpretForecast(
     model: MODEL,
     systemPrompt: SYSTEM_PROMPT,
     userContent: JSON.stringify(input),
-    maxTokens: 16000, // raised from 8192 -- diagnostics showed genuine truncation partway through the 3rd (12-month) horizon; this schema is the most content-dense in the app (3 horizons x 3 scenarios each)
+    maxTokens: 28000, // raised from 16000 -- adding the 1-week and 1-month horizons took this from 3 horizons x 3 scenarios to 5 x 3 (a ~67% increase in required output); 16000 was already tuned to the previous truncation point, so it needed to scale with it
     timeoutMs: FETCH_TIMEOUT_MS,
   });
   if (!callResult.ok) return callResult;

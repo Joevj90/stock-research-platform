@@ -5,7 +5,7 @@ import type { GatheredAnalysisInputs } from "@/server/agents/shared/analysis-sum
 
 const log = logger.child("api:final-report:forecast");
 
-export const maxDuration = 120;
+export const maxDuration = 200; // raised from 120 -- the 5-horizon forecast (up from 3) now needs more generation time than this route's old budget allowed
 
 const STATUS_BY_ERROR_CODE: Record<string, number> = {
   AI_NOT_CONFIGURED: 501,
