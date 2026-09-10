@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { TickerSearch } from "@/components/TickerSearch";
 
 export default function HomePage() {
@@ -12,9 +11,6 @@ export default function HomePage() {
         </p>
       </div>
       <TickerSearch />
-      <Link href="/screener" className="text-xs text-accent hover:text-blue-400">
-        Or scan the S&amp;P 500 for stocks the AI expects to gain 10%+ in a month →
-      </Link>
     </main>
   );
 }

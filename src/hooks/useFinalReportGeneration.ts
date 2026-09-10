@@ -32,8 +32,7 @@ export const GATHER_SUB_STEPS = [
 
 export const FINAL_REPORT_STEPS = [
   { key: "gather", label: "Gathering all analyses" },
-  { key: "forecast", label: "Forecasting" },
-  { key: "committee", label: "Investment Committee" },
+  { key: "forecast-and-committee", label: "Forecasting & Investment Committee" },
   { key: "devils-advocate", label: "Devil's Advocate" },
   { key: "assemble", label: "Final AI Investment Report" },
 ] as const;
@@ -98,13 +97,22 @@ async function postStep<T>(url: string, body?: unknown, retriesLeft = 2): Promis
 }
 
 /**
- * Runs the Final Report's 5-step generation flow (gather → forecast →
- * committee → Devil's Advocate → assemble) as 5 separate, short-lived
- * requests the browser orchestrates in sequence, rather than one giant
- * request. Shared between `FinalReportPanel` (the "Generate Final
- * Report" button) and `AnalysisHistoryPanel` (the "Research Again"
- * button, Step 19) -- both need the exact same generation flow, so it
- * lives here once rather than being duplicated.
+ * Runs the Final Report's generation flow as separate, short-lived
+ * requests the browser orchestrates, rather than one giant request.
+ * Shared between `FinalReportPanel` (the "Analyze Stock" button) and
+ * `AnalysisHistoryPanel` (the "Research Again" button, Step 19) -- both
+ * need the exact same generation flow, so it lives here once rather
+ * than being duplicated.
+ *
+ * Forecasting and the Investment Committee are dispatched CONCURRENTLY,
+ * not one after the other: each depends only on `gathered` and neither
+ * reads the other's output (only the Devil's Advocate, which comes
+ * after both, needs both). Running them at the same time takes the
+ * shorter of the two off the critical path entirely -- a real wall-clock
+ * saving on every single report, with no change to what either one
+ * receives or produces. They're shown as one combined step because
+ * that's now literally what they are; reporting them as two sequential
+ * steps would misrepresent what the user is waiting on.
  *
  * Every successful run also permanently saves itself as a new historical
  * version (Step 19) via the assemble endpoint's own server-side hook --
@@ -124,35 +132,37 @@ export function useFinalReportGeneration(ticker: string) {
     }
     const gathered = gatherRes.data;
 
+    // Both only need `gathered` -- see the note above on why these run
+    // together. Each still retries independently inside postStep.
     setState({ status: "loading", stepIndex: 1 });
-    const forecastRes = await postStep<ForecastResult>(`/api/final-report/${ticker}/forecast`, { gathered });
+    const [forecastRes, committeeRes] = await Promise.all([
+      postStep<ForecastResult>(`/api/final-report/${ticker}/forecast`, { gathered }),
+      postStep<CommitteeResult>(`/api/final-report/${ticker}/committee`, { gathered }),
+    ]);
     if (!forecastRes.ok) {
-      setState({ status: "error", message: forecastRes.message, failedStepIndex: 1 });
+      setState({ status: "error", message: `Forecasting: ${forecastRes.message}`, failedStepIndex: 1 });
+      return;
+    }
+    if (!committeeRes.ok) {
+      setState({ status: "error", message: `Investment Committee: ${committeeRes.message}`, failedStepIndex: 1 });
       return;
     }
     const forecast = forecastRes.data;
-
-    setState({ status: "loading", stepIndex: 2 });
-    const committeeRes = await postStep<CommitteeResult>(`/api/final-report/${ticker}/committee`, { gathered });
-    if (!committeeRes.ok) {
-      setState({ status: "error", message: committeeRes.message, failedStepIndex: 2 });
-      return;
-    }
     const committee = committeeRes.data;
 
-    setState({ status: "loading", stepIndex: 3 });
+    setState({ status: "loading", stepIndex: 2 });
     const daRes = await postStep<DevilsAdvocateResult>(`/api/final-report/${ticker}/devils-advocate`, {
       gathered,
       forecast,
       committee,
     });
     if (!daRes.ok) {
-      setState({ status: "error", message: daRes.message, failedStepIndex: 3 });
+      setState({ status: "error", message: daRes.message, failedStepIndex: 2 });
       return;
     }
     const devilsAdvocate = daRes.data;
 
-    setState({ status: "loading", stepIndex: 4 });
+    setState({ status: "loading", stepIndex: 3 });
     const assembleRes = await postStep<FinalReportResult>(`/api/final-report/${ticker}/assemble`, {
       gathered,
       forecast,
@@ -160,7 +170,7 @@ export function useFinalReportGeneration(ticker: string) {
       devilsAdvocate,
     });
     if (!assembleRes.ok) {
-      setState({ status: "error", message: assembleRes.message, failedStepIndex: 4 });
+      setState({ status: "error", message: assembleRes.message, failedStepIndex: 3 });
       return;
     }
 
