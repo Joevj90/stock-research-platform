@@ -2,13 +2,18 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import type { BacktestResult, PatternPerformance } from "@/lib/pattern-backtest";
+import type { BacktestResult, PatternPerformance, PooledBacktestResult } from "@/lib/pattern-backtest";
 
 type LabState =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "success"; data: BacktestResult & { interval: string; horizonDays: number; lookbackDays: number } };
+  | { status: "success"; data: BacktestResult & { interval: string; horizonDays: number; lookbackDays: number } }
+  | { status: "pooled"; data: PooledBacktestResult & { skipped: string[]; horizonDays: number } };
+
+/** A spread across sectors rather than ten tech names, so a single
+ * sector's 90-day run can't masquerade as a pattern working. */
+const DEFAULT_BATCH = "AAPL, MSFT, NVDA, JPM, XOM, JNJ, WMT, CAT, KO, T";
 
 function pct(n: number): string {
   return `${(n * 100).toFixed(1)}%`;
@@ -28,6 +33,7 @@ export default function PatternLabPage() {
   const [ticker, setTicker] = useState("AAPL");
   const [horizonDays, setHorizonDays] = useState(1);
   const [state, setState] = useState<LabState>({ status: "idle" });
+  const [batchTickers, setBatchTickers] = useState(DEFAULT_BATCH);
 
   async function run() {
     setState({ status: "loading" });
@@ -44,6 +50,28 @@ export default function PatternLabPage() {
       setState({ status: "success", data: await res.json() });
     } catch {
       setState({ status: "error", message: "Lost connection while running the backtest." });
+    }
+  }
+
+  async function runBatch() {
+    setState({ status: "loading" });
+    try {
+      const res = await fetch("/api/pattern-backtest-batch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          tickers: batchTickers.split(",").map((t) => t.trim()).filter(Boolean),
+          horizonDays,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        setState({ status: "error", message: body?.error?.message ?? "The pooled backtest failed." });
+        return;
+      }
+      setState({ status: "pooled", data: await res.json() });
+    } catch {
+      setState({ status: "error", message: "Lost connection while running the pooled backtest." });
     }
   }
 
@@ -92,9 +120,40 @@ export default function PatternLabPage() {
           </button>
         </div>
 
+        <div className="mt-5 border-t border-border pt-4">
+          <h2 className="text-xs font-semibold text-gray-200">Pooled run (recommended)</h2>
+          <p className="mt-1 text-[11px] text-gray-500">
+            Combines occurrences from several tickers into one test. This matters: ten separate tests let you pick
+            the best-looking one, and with enough tries something always looks good by luck. One pooled test with a
+            large sample avoids that.
+          </p>
+          <div className="mt-3 flex flex-wrap items-end gap-3">
+            <label className="flex min-w-[260px] flex-1 flex-col gap-1">
+              <span className="text-[10px] uppercase tracking-wide text-gray-500">Tickers (comma separated, max 10)</span>
+              <input
+                value={batchTickers}
+                onChange={(e) => setBatchTickers(e.target.value)}
+                className="rounded-md border border-border bg-bg px-2 py-1.5 text-sm text-gray-100"
+              />
+            </label>
+            <button
+              onClick={runBatch}
+              disabled={state.status === "loading"}
+              className="rounded-md border border-accent px-4 py-2 text-xs font-medium text-accent transition hover:bg-accent/10 disabled:opacity-50"
+            >
+              {state.status === "loading" ? "Running…" : "Run pooled backtest"}
+            </button>
+          </div>
+          <p className="mt-2 text-[11px] text-gray-500">
+            Ten tickers takes a few minutes — each one fetches 90 days of 5-minute bars.
+          </p>
+        </div>
+
         {state.status === "error" && <p className="mt-4 text-sm text-red-400">{state.message}</p>}
 
         {state.status === "success" && <Results data={state.data} />}
+
+        {state.status === "pooled" && <PooledResults data={state.data} />}
       </section>
     </main>
   );
@@ -261,6 +320,99 @@ function EdgeChart({ patterns }: { patterns: PatternPerformance[] }) {
         Bars show edge over the baseline. The grey band behind each is the range explainable by chance at that
         sample size — a bar that stays inside its band has shown nothing.
       </p>
+    </div>
+  );
+}
+
+function PooledResults({
+  data,
+}: {
+  data: PooledBacktestResult & { skipped: string[]; horizonDays: number };
+}) {
+  const meaningful = data.patterns.filter((p) => p.isStatisticallyMeaningful);
+  const largestSample = data.patterns.reduce((m, p) => Math.max(m, p.sampleSize), 0);
+
+  return (
+    <div className="mt-6 flex flex-col gap-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Stat label="Tickers pooled" value={String(data.tickers.length)} />
+        <Stat label="Bars analyzed" value={data.totalBars.toLocaleString()} />
+        <Stat label="Largest sample" value={String(largestSample)} />
+        <Stat label="Blended baseline" value={pct(data.blendedUpRate)} />
+      </div>
+
+      {data.skipped.length > 0 && (
+        <p className="text-xs text-yellow-400">
+          Skipped (no data): {data.skipped.join(", ")}
+        </p>
+      )}
+
+      <p className="text-xs text-gray-500">
+        Pooled across {data.tickers.join(", ")}. Each pattern&apos;s baseline is weighted by which tickers its
+        occurrences actually came from, so a pattern that clustered in a strongly rising stock doesn&apos;t get
+        credit for that stock&apos;s drift.
+      </p>
+
+      {data.patterns.length > 0 && <EdgeChart patterns={data.patterns} />}
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-xs">
+          <thead>
+            <tr className="text-gray-500">
+              <th className="px-2 py-1.5 font-medium">Pattern</th>
+              <th className="px-2 py-1.5 font-medium">N</th>
+              <th className="px-2 py-1.5 font-medium">Hit rate</th>
+              <th className="px-2 py-1.5 font-medium">Baseline</th>
+              <th className="px-2 py-1.5 font-medium">Edge</th>
+              <th className="px-2 py-1.5 font-medium">Verdict</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.patterns.map((p) => (
+              <tr key={p.key} className="border-t border-border">
+                <td className="px-2 py-1.5">
+                  <span className="font-medium text-gray-100">{p.name}</span>
+                  <div className="text-[10px] text-gray-500">{p.direction}</div>
+                </td>
+                <td className="px-2 py-1.5 tabular-nums text-gray-400">{p.sampleSize}</td>
+                <td className="px-2 py-1.5 tabular-nums text-gray-300">{pct(p.hitRate)}</td>
+                <td className="px-2 py-1.5 tabular-nums text-gray-500">{pct(p.baselineHitRate)}</td>
+                <td className={`px-2 py-1.5 tabular-nums font-semibold ${p.edge > 0 ? "text-up" : "text-down"}`}>
+                  {p.edge >= 0 ? "+" : ""}
+                  {pct(p.edge)}
+                </td>
+                <td className="px-2 py-1.5 text-[10px]">
+                  {p.isStatisticallyMeaningful ? (
+                    <span className="text-up">Beats chance</span>
+                  ) : p.sampleSize < 30 ? (
+                    <span className="text-gray-500">Too few samples</span>
+                  ) : (
+                    <span className="text-gray-500">Within noise</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="rounded-lg border border-border bg-bg/40 p-3">
+        <h2 className="text-xs font-semibold text-gray-200">What this means</h2>
+        {meaningful.length === 0 ? (
+          <p className="mt-1 text-xs text-gray-400">
+            Across {data.tickers.length} tickers and {largestSample} occurrences at the largest sample, no pattern
+            showed an edge distinguishable from chance. At this sample size that is a reasonably firm answer, not an
+            inconclusive one: these patterns do not appear to carry predictive signal at a {data.horizonDays}-day
+            horizon, and building a prediction feature on them would not be justified by this evidence.
+          </p>
+        ) : (
+          <p className="mt-1 text-xs text-gray-400">
+            {meaningful.length} pattern{meaningful.length > 1 ? "s" : ""} cleared chance across{" "}
+            {data.tickers.length} tickers. That is a real result worth pursuing — though before trusting it, re-run
+            on a different 90-day window, since one period can still flatter a pattern.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

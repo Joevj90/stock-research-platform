@@ -210,3 +210,154 @@ export function backtestPatterns(
     trendContinuationSampleSize: trend.sampleSize,
   };
 }
+
+/**
+ * One ticker's contribution to a pooled run: the raw per-occurrence
+ * outcomes, kept unaggregated so they can be combined across tickers
+ * without averaging-of-averages errors.
+ */
+export interface TickerContribution {
+  ticker: string;
+  /** Per pattern key: how many occurrences and how many were correct. */
+  byPattern: Map<string, { name: string; direction: PatternDirection; hits: number; total: number; favourableSum: number }>;
+  /** This ticker's own up-rate. Pooling MUST weight by this per ticker
+   * rather than using a single global figure, because each stock drifted
+   * differently over the window -- a stock that rose in 61% of windows
+   * and one that rose in 48% imply completely different baselines for
+   * the same pattern. */
+  upRate: number;
+  evaluableBars: number;
+}
+
+/** Extracts one ticker's per-occurrence outcomes for later pooling. */
+export function collectContribution(
+  ticker: string,
+  bars: PriceBar[],
+  horizonBars: number
+): TickerContribution {
+  const detected = detectAllPatterns(bars);
+  const { upRate, evaluable } = computeUpRate(bars, horizonBars);
+  const byPattern = new Map<
+    string,
+    { name: string; direction: PatternDirection; hits: number; total: number; favourableSum: number }
+  >();
+
+  for (const p of detected) {
+    const fwd = forwardReturnPct(bars, p.barIndex, horizonBars);
+    if (fwd === null || fwd === 0) continue;
+
+    const entry = byPattern.get(p.key) ?? {
+      name: p.name,
+      direction: p.direction,
+      hits: 0,
+      total: 0,
+      favourableSum: 0,
+    };
+    const predictedUp = p.direction === "bullish";
+    entry.total++;
+    if (fwd > 0 === predictedUp) entry.hits++;
+    entry.favourableSum += predictedUp ? fwd : -fwd;
+    byPattern.set(p.key, entry);
+  }
+
+  return { ticker, byPattern, upRate, evaluableBars: evaluable };
+}
+
+export interface PooledBacktestResult {
+  tickers: string[];
+  horizonBars: number;
+  totalBars: number;
+  /** Occurrence-weighted average up-rate across the pooled tickers. */
+  blendedUpRate: number;
+  patterns: PatternPerformance[];
+}
+
+/**
+ * Combines several tickers' contributions into one result.
+ *
+ * Pooling exists because per-ticker samples are too small to conclude
+ * anything, and because running ten separate tests and picking the
+ * best-looking one is close to guaranteed to surface a false positive --
+ * with enough independent tests, something always looks good by luck.
+ * One pooled test with a large sample avoids that trap entirely.
+ *
+ * The baseline for each pattern is weighted by where its occurrences
+ * actually came from: if 80% of a pattern's hits came from a stock that
+ * rose in 61% of windows, that stock's drift should dominate that
+ * pattern's baseline. Using one global average instead would quietly
+ * flatter patterns that happened to cluster in rising names.
+ */
+export function poolContributions(
+  contributions: TickerContribution[],
+  horizonBars: number
+): PooledBacktestResult {
+  const allKeys = new Set<string>();
+  for (const c of contributions) for (const k of c.byPattern.keys()) allKeys.add(k);
+
+  const patterns: PatternPerformance[] = [];
+
+  for (const key of allKeys) {
+    let hits = 0;
+    let total = 0;
+    let favourableSum = 0;
+    let weightedBaselineSum = 0;
+    let name = key;
+    let direction: PatternDirection = "bullish";
+
+    for (const c of contributions) {
+      const entry = c.byPattern.get(key);
+      if (!entry) continue;
+      name = entry.name;
+      direction = entry.direction;
+      hits += entry.hits;
+      total += entry.total;
+      favourableSum += entry.favourableSum;
+      // Weight this ticker's baseline by how many of the pattern's
+      // occurrences it actually contributed.
+      const tickerBaseline = entry.direction === "bullish" ? c.upRate : 1 - c.upRate;
+      weightedBaselineSum += tickerBaseline * entry.total;
+    }
+
+    if (total === 0) continue;
+
+    const hitRate = hits / total;
+    const baselineHitRate = weightedBaselineSum / total;
+    const edge = hitRate - baselineHitRate;
+    const standardError = Math.sqrt((hitRate * (1 - hitRate)) / total);
+
+    patterns.push({
+      key,
+      name,
+      direction,
+      sampleSize: total,
+      hitRate,
+      baselineHitRate,
+      edge,
+      standardError,
+      isStatisticallyMeaningful: total >= 30 && Math.abs(edge) > 2 * standardError,
+      averageFavourableReturnPct: favourableSum / total,
+    });
+  }
+
+  patterns.sort((a, b) => {
+    if (a.isStatisticallyMeaningful !== b.isStatisticallyMeaningful) {
+      return a.isStatisticallyMeaningful ? -1 : 1;
+    }
+    return b.edge - a.edge;
+  });
+
+  const totalOccurrences = patterns.reduce((s, p) => s + p.sampleSize, 0);
+  const blendedUpRate =
+    totalOccurrences === 0
+      ? 0
+      : contributions.reduce((s, c) => s + c.upRate * c.evaluableBars, 0) /
+        Math.max(1, contributions.reduce((s, c) => s + c.evaluableBars, 0));
+
+  return {
+    tickers: contributions.map((c) => c.ticker),
+    horizonBars,
+    totalBars: contributions.reduce((s, c) => s + c.evaluableBars, 0),
+    blendedUpRate,
+    patterns,
+  };
+}
