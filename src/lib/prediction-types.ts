@@ -62,6 +62,30 @@ export interface HorizonAccuracy {
   evaluatedCount: number;
   correctCount: number;
   directionAccuracyPct: number | null; // null if evaluatedCount is below the minimum sample size
+
+  /**
+   * What a naive "always guess the direction the market actually drifted"
+   * rule would have scored on this exact set of resolved predictions.
+   *
+   * This exists because a bare accuracy percentage is uninterpretable on
+   * its own. If the stocks in the sample rose over 60% of the time, then
+   * a forecaster scoring 60% has matched what you'd get by ignoring the
+   * analysis entirely and always guessing up. Derived from the stored
+   * actualReturnPct of the same resolved predictions, so it needs no
+   * extra data and applies retroactively to everything already tracked.
+   */
+  baselineAccuracyPct: number | null;
+  /** directionAccuracyPct - baselineAccuracyPct. The only figure that
+   * indicates the forecasting pipeline added information over a coin
+   * flip weighted by market drift. */
+  edgePct: number | null;
+  /** Standard error of the accuracy rate, in percentage points. An edge
+   * smaller than roughly twice this is indistinguishable from chance. */
+  standardErrorPct: number | null;
+  /** True only when the sample clears MIN_SAMPLE_FOR_EDGE_VERDICT AND
+   * the edge exceeds two standard errors. A large edge on six
+   * predictions is not a finding. */
+  isEdgeMeaningful: boolean;
 }
 
 export interface RangeAccuracy {

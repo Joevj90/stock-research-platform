@@ -324,3 +324,90 @@ describe("buildAccuracyDashboard", () => {
     expect(result.pendingPredictions).toBe(2);
   });
 });
+
+describe("computeAccuracyByHorizon — baseline comparison", () => {
+  /** A resolved prediction: `up` is what the market actually did,
+   * `correct` is whether the AI called that direction. */
+  function resolved(up: boolean, correct: boolean) {
+    return prediction({
+      horizon: "1_week",
+      evaluatedAt: new Date().toISOString(),
+      directionCorrect: correct,
+      actualReturnPct: up ? 4 : -4,
+    });
+  }
+
+  it("sets the baseline to the dominant market direction, not 50%", () => {
+    // 8 of 10 rose, so always guessing up scores 80%.
+    const records = [
+      ...Array.from({ length: 8 }, () => resolved(true, true)),
+      ...Array.from({ length: 2 }, () => resolved(false, true)),
+    ];
+    const [oneWeek] = computeAccuracyByHorizon(records, ["1_week"]);
+    expect(oneWeek!.baselineAccuracyPct).toBeCloseTo(80, 5);
+  });
+
+  it("reports zero edge when the AI merely matches the market's drift", () => {
+    // Market rose 7 of 10; AI also right 7 of 10. It added nothing.
+    const records = [
+      ...Array.from({ length: 7 }, () => resolved(true, true)),
+      ...Array.from({ length: 3 }, () => resolved(false, false)),
+    ];
+    const [oneWeek] = computeAccuracyByHorizon(records, ["1_week"]);
+    expect(oneWeek!.directionAccuracyPct).toBeCloseTo(70, 5);
+    expect(oneWeek!.edgePct).toBeCloseTo(0, 5);
+  });
+
+  it("reports negative edge when the AI does worse than guessing the drift", () => {
+    // Market rose 9 of 10 (baseline 90%), AI right only 5 of 10.
+    const records = [
+      ...Array.from({ length: 5 }, () => resolved(true, true)),
+      ...Array.from({ length: 4 }, () => resolved(true, false)),
+      resolved(false, false),
+    ];
+    const [oneWeek] = computeAccuracyByHorizon(records, ["1_week"]);
+    expect(oneWeek!.edgePct!).toBeLessThan(0);
+  });
+
+  it("refuses an edge verdict below 30 resolved predictions, however large the edge", () => {
+    const records = Array.from({ length: 10 }, (_, i) => resolved(i % 2 === 0, true));
+    const [oneWeek] = computeAccuracyByHorizon(records, ["1_week"]);
+    expect(oneWeek!.evaluatedCount).toBe(10);
+    expect(oneWeek!.isEdgeMeaningful).toBe(false);
+  });
+
+  it("declares a meaningful edge once the sample is large and the edge clears noise", () => {
+    // 50 predictions, market split evenly (baseline 50%), AI right 45.
+    const records = [
+      ...Array.from({ length: 25 }, (_, i) => resolved(true, i < 23)),
+      ...Array.from({ length: 25 }, (_, i) => resolved(false, i < 22)),
+    ];
+    const [oneWeek] = computeAccuracyByHorizon(records, ["1_week"]);
+    expect(oneWeek!.evaluatedCount).toBe(50);
+    expect(oneWeek!.isEdgeMeaningful).toBe(true);
+    expect(oneWeek!.edgePct!).toBeGreaterThan(0);
+  });
+
+  it("leaves baseline and edge null when nothing has resolved yet", () => {
+    const [oneWeek] = computeAccuracyByHorizon([], ["1_week"]);
+    expect(oneWeek!.evaluatedCount).toBe(0);
+    expect(oneWeek!.baselineAccuracyPct).toBeNull();
+    expect(oneWeek!.edgePct).toBeNull();
+    expect(oneWeek!.isEdgeMeaningful).toBe(false);
+  });
+
+  it("ignores zero-return predictions when computing the market's drift", () => {
+    const records = [
+      ...Array.from({ length: 6 }, () => resolved(true, true)),
+      prediction({
+        horizon: "1_week",
+        evaluatedAt: new Date().toISOString(),
+        directionCorrect: true,
+        actualReturnPct: 0,
+      }),
+    ];
+    const [oneWeek] = computeAccuracyByHorizon(records, ["1_week"]);
+    // All six directional outcomes rose, so the baseline is 100%.
+    expect(oneWeek!.baselineAccuracyPct).toBeCloseTo(100, 5);
+  });
+});

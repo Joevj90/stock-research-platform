@@ -229,16 +229,60 @@ function AccuracyDashboardView({ dashboard }: { dashboard: AccuracyDashboard }) 
       )}
 
       <div className="mt-3">
-        <h4 className="mb-1 text-[11px] font-medium uppercase tracking-wide text-gray-500">Accuracy By Time Horizon</h4>
-        <div className="flex gap-3 text-xs">
-          {dashboard.accuracyByHorizon.map((h) => (
-            <div key={h.horizon}>
-              <span className="text-gray-500">{HORIZON_LABEL[h.horizon]}: </span>
-              <span className="font-medium text-gray-200">
-                {h.directionAccuracyPct !== null ? `${h.directionAccuracyPct.toFixed(0)}%` : "Not enough data"}
-              </span>
-            </div>
-          ))}
+        <h4 className="mb-1 text-[11px] font-medium uppercase tracking-wide text-gray-500">
+          Accuracy By Time Horizon — vs. Doing No Analysis
+        </h4>
+        <p className="mb-2 text-[11px] text-gray-500">
+          An accuracy figure on its own can&apos;t be read. If these stocks rose 60% of the time, then scoring 60%
+          means the analysis added nothing over always guessing up. The Edge column is the real result.
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="text-gray-500">
+                <th className="px-2 py-1 font-medium">Horizon</th>
+                <th className="px-2 py-1 font-medium">N</th>
+                <th className="px-2 py-1 font-medium">AI</th>
+                <th className="px-2 py-1 font-medium">No analysis</th>
+                <th className="px-2 py-1 font-medium">Edge</th>
+                <th className="px-2 py-1 font-medium">Verdict</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dashboard.accuracyByHorizon.map((h) => (
+                <tr key={h.horizon} className="border-t border-border">
+                  <td className="px-2 py-1 text-gray-300">{HORIZON_LABEL[h.horizon]}</td>
+                  <td className="px-2 py-1 tabular-nums text-gray-400">{h.evaluatedCount}</td>
+                  <td className="px-2 py-1 tabular-nums text-gray-200">
+                    {h.directionAccuracyPct !== null ? `${h.directionAccuracyPct.toFixed(0)}%` : "—"}
+                  </td>
+                  <td className="px-2 py-1 tabular-nums text-gray-500">
+                    {h.baselineAccuracyPct !== null ? `${h.baselineAccuracyPct.toFixed(0)}%` : "—"}
+                  </td>
+                  <td
+                    className={`px-2 py-1 tabular-nums font-semibold ${
+                      h.edgePct === null ? "text-gray-500" : h.edgePct > 0 ? "text-up" : "text-down"
+                    }`}
+                  >
+                    {h.edgePct !== null ? `${h.edgePct >= 0 ? "+" : ""}${h.edgePct.toFixed(1)}%` : "—"}
+                  </td>
+                  <td className="px-2 py-1 text-[10px]">
+                    {h.evaluatedCount === 0 ? (
+                      <span className="text-gray-500">No data yet</span>
+                    ) : h.isEdgeMeaningful ? (
+                      <span className={h.edgePct !== null && h.edgePct > 0 ? "text-up" : "text-down"}>
+                        {h.edgePct !== null && h.edgePct > 0 ? "Beats no analysis" : "Worse than no analysis"}
+                      </span>
+                    ) : h.evaluatedCount < 30 ? (
+                      <span className="text-gray-500">Need {30 - h.evaluatedCount} more</span>
+                    ) : (
+                      <span className="text-gray-500">Within noise</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 

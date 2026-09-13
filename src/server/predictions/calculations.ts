@@ -23,6 +23,11 @@ import type {
 const DIRECTION_FLAT_THRESHOLD_PCT = 2; // "account for predictions near zero where the difference is insignificant"
 const MIN_SAMPLE_FOR_OVERALL_ACCURACY = 5;
 const MIN_SAMPLE_PER_HORIZON = 3;
+/** Higher than MIN_SAMPLE_PER_HORIZON on purpose: showing a rough
+ * accuracy figure early is harmless, but declaring that the pipeline
+ * beats a naive baseline is a much stronger claim and needs a real
+ * sample behind it. Same gate the chart-pattern backtest uses. */
+const MIN_SAMPLE_FOR_EDGE_VERDICT = 30;
 const MIN_SAMPLE_FOR_CALIBRATION = 10;
 
 export function computeActualReturnPct(actualPrice: number, originalPrice: number): number {
@@ -119,11 +124,47 @@ export function computeAccuracyByHorizon(
   return horizons.map((horizon) => {
     const evaluated = evaluatedOnly(predictions).filter((p) => p.horizon === horizon);
     const correct = evaluated.filter((p) => p.directionCorrect === true).length;
+    const n = evaluated.length;
+
+    const directionAccuracyPct = n >= MIN_SAMPLE_PER_HORIZON ? (correct / n) * 100 : null;
+
+    // The naive baseline: how often the market actually moved up across
+    // these same resolved predictions. Guessing that direction every
+    // single time, with no analysis at all, would have scored whichever
+    // of that rate or its complement is higher -- so that is the bar the
+    // pipeline has to clear, not 50%.
+    const withReturns = evaluated.filter((p) => p.actualReturnPct !== null && p.actualReturnPct !== 0);
+    const upCount = withReturns.filter((p) => (p.actualReturnPct as number) > 0).length;
+    const upRate = withReturns.length === 0 ? null : upCount / withReturns.length;
+    const baselineRate = upRate === null ? null : Math.max(upRate, 1 - upRate);
+
+    const baselineAccuracyPct =
+      baselineRate === null || n < MIN_SAMPLE_PER_HORIZON ? null : baselineRate * 100;
+
+    const edgePct =
+      directionAccuracyPct === null || baselineAccuracyPct === null
+        ? null
+        : directionAccuracyPct - baselineAccuracyPct;
+
+    const accuracyRate = n === 0 ? 0 : correct / n;
+    const standardErrorPct =
+      n < MIN_SAMPLE_PER_HORIZON ? null : Math.sqrt((accuracyRate * (1 - accuracyRate)) / n) * 100;
+
+    const isEdgeMeaningful =
+      n >= MIN_SAMPLE_FOR_EDGE_VERDICT &&
+      edgePct !== null &&
+      standardErrorPct !== null &&
+      Math.abs(edgePct) > 2 * standardErrorPct;
+
     return {
       horizon,
-      evaluatedCount: evaluated.length,
+      evaluatedCount: n,
       correctCount: correct,
-      directionAccuracyPct: evaluated.length >= MIN_SAMPLE_PER_HORIZON ? (correct / evaluated.length) * 100 : null,
+      directionAccuracyPct,
+      baselineAccuracyPct,
+      edgePct,
+      standardErrorPct,
+      isEdgeMeaningful,
     };
   });
 }
