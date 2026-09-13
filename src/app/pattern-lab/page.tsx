@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import type { BacktestResult } from "@/lib/pattern-backtest";
+import type { BacktestResult, PatternPerformance } from "@/lib/pattern-backtest";
 
 type LabState =
   | { status: "idle" }
@@ -122,6 +122,8 @@ function Results({
         The Edge column is the only number that matters.
       </p>
 
+      {data.patterns.length > 0 && <EdgeChart patterns={data.patterns} />}
+
       {data.patterns.length === 0 ? (
         <p className="text-sm text-gray-400">No patterns were detected in this sample.</p>
       ) : (
@@ -187,6 +189,78 @@ function Results({
           </p>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Edge-versus-noise chart. Each pattern gets a bar showing its edge over
+ * the naive baseline, drawn on top of a shaded band representing +/- two
+ * standard errors for that pattern's sample size.
+ *
+ * The band is the whole point. A bar that stays inside its own grey band
+ * has not demonstrated anything, however long it looks -- which is
+ * exactly the mistake a plain bar chart of hit rates would invite. Small
+ * samples produce wide bands, so a single lucky occurrence renders as a
+ * long bar swallowed by an even longer band, and reads correctly at a
+ * glance.
+ */
+function EdgeChart({ patterns }: { patterns: PatternPerformance[] }) {
+  const rowHeight = 26;
+  const height = patterns.length * rowHeight + 28;
+  const width = 560;
+  const midX = width / 2;
+
+  // Scale to whichever is widest: the largest edge or the widest noise
+  // band, so a band is never clipped and can't look narrower than it is.
+  const maxExtent = Math.max(
+    0.05,
+    ...patterns.map((p) => Math.max(Math.abs(p.edge), 2 * p.standardError))
+  );
+  const scale = (midX - 70) / maxExtent;
+
+  return (
+    <div className="overflow-x-auto">
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full" role="img" aria-label="Pattern edge versus noise">
+        {patterns.map((p, i) => {
+          const y = i * rowHeight + 8;
+          const bandHalf = 2 * p.standardError * scale;
+          const edgeWidth = Math.abs(p.edge) * scale;
+          const edgeX = p.edge >= 0 ? midX : midX - edgeWidth;
+          return (
+            <g key={p.key}>
+              <rect
+                x={midX - bandHalf}
+                y={y}
+                width={bandHalf * 2}
+                height={rowHeight - 10}
+                fill="currentColor"
+                className="text-gray-600"
+                opacity={0.25}
+              />
+              <rect
+                x={edgeX}
+                y={y + 3}
+                width={Math.max(edgeWidth, 1)}
+                height={rowHeight - 16}
+                className={p.isStatisticallyMeaningful ? "text-up" : "text-gray-400"}
+                fill="currentColor"
+              />
+              <text x={4} y={y + 12} className="fill-gray-400" fontSize="9">
+                {p.name} (n={p.sampleSize})
+              </text>
+            </g>
+          );
+        })}
+        <line x1={midX} y1={0} x2={midX} y2={height - 20} stroke="currentColor" className="text-gray-500" strokeWidth={1} />
+        <text x={midX + 4} y={height - 8} className="fill-gray-500" fontSize="9">
+          baseline
+        </text>
+      </svg>
+      <p className="mt-1 text-[11px] text-gray-500">
+        Bars show edge over the baseline. The grey band behind each is the range explainable by chance at that
+        sample size — a bar that stays inside its band has shown nothing.
+      </p>
     </div>
   );
 }

@@ -233,6 +233,42 @@ export async function getPeerSymbols(rawTicker: string, limit = 5): Promise<Resu
  * would bloat the store for data that is only read during an explicit
  * short-term analysis. If that changes, cache.ts is where it would go.
  */
+/** FMP silently truncates a long intraday request rather than honouring
+ * the full date range: a 90-day AAPL request came back with 390 5-minute
+ * bars, which is exactly five trading sessions. Confirmed empirically,
+ * and not documented by FMP. So a long window must be assembled from
+ * several short requests instead of asked for in one. */
+const INTRADAY_CHUNK_DAYS = 5;
+const INTRADAY_CHUNK_CONCURRENCY = 4;
+
+function splitDateRange(from: Date, to: Date, chunkDays: number): Array<{ from: Date; to: Date }> {
+  const chunks: Array<{ from: Date; to: Date }> = [];
+  const cursor = new Date(from);
+  while (cursor <= to) {
+    const chunkStart = new Date(cursor);
+    const chunkEnd = new Date(cursor);
+    chunkEnd.setDate(chunkEnd.getDate() + chunkDays - 1);
+    chunks.push({ from: chunkStart, to: chunkEnd > to ? new Date(to) : chunkEnd });
+    cursor.setDate(cursor.getDate() + chunkDays);
+  }
+  return chunks;
+}
+
+/**
+ * Intraday OHLCV bars for short-term chart analysis, oldest first.
+ *
+ * Assembled from several chunked provider requests (see
+ * INTRADAY_CHUNK_DAYS) because the provider truncates long ranges.
+ * Individual chunks that fail are skipped rather than failing the whole
+ * range, since one bad week shouldn't cost the caller the other twelve;
+ * but if every chunk fails the error is surfaced rather than returning a
+ * misleadingly empty result.
+ *
+ * Deliberately NOT cached in the database, unlike quotes and daily
+ * history: intraday ranges are arbitrary and a 90-day 5-minute range is
+ * several thousand rows, read only during an explicit short-term
+ * analysis.
+ */
 export async function getIntradayHistory(
   rawTicker: string,
   interval: IntradayInterval,
@@ -249,7 +285,59 @@ export async function getIntradayHistory(
       error: { code: "INVALID_DATE_RANGE", message: "`from` date must not be after `to` date." },
     };
   }
-  return marketDataProvider.getIntradayHistory(ticker, interval, from, to);
+
+  const chunks = splitDateRange(from, to, INTRADAY_CHUNK_DAYS);
+  const collected: PriceBar[] = [];
+  let lastError: Extract<Result<PriceBar[]>, { ok: false }> | null = null;
+  let failures = 0;
+
+  for (let i = 0; i < chunks.length; i += INTRADAY_CHUNK_CONCURRENCY) {
+    const batch = chunks.slice(i, i + INTRADAY_CHUNK_CONCURRENCY);
+    const results = await Promise.all(
+      batch.map((c) => marketDataProvider.getIntradayHistory(ticker, interval, c.from, c.to))
+    );
+    for (const r of results) {
+      if (r.ok) {
+        collected.push(...r.data);
+      } else {
+        failures++;
+        lastError = r;
+      }
+    }
+  }
+
+  if (collected.length === 0) {
+    return (
+      lastError ?? {
+        ok: false,
+        error: {
+          code: "NO_DATA",
+          message: `No intraday data returned for "${ticker}" in the requested range.`,
+        },
+      }
+    );
+  }
+
+  if (failures > 0) {
+    log.warn("some intraday chunks failed; returning partial range", {
+      ticker,
+      interval,
+      failedChunks: failures,
+      totalChunks: chunks.length,
+    });
+  }
+
+  // Chunk boundaries can overlap, so de-duplicate by timestamp before
+  // sorting. Duplicate bars would inflate pattern sample sizes, which is
+  // precisely the kind of quiet error this experiment cannot afford.
+  const byTimestamp = new Map<string, PriceBar>();
+  for (const bar of collected) byTimestamp.set(bar.timestamp, bar);
+
+  const bars = [...byTimestamp.values()].sort(
+    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+  );
+
+  return { ok: true, data: bars };
 }
 
 export async function getStockSnapshot(

@@ -24,12 +24,13 @@ vi.mock("./provider", () => ({
     getCompanyName: vi.fn(),
     getQuote: vi.fn(),
     getHistory: vi.fn(),
+    getIntradayHistory: vi.fn(),
   },
 }));
 
 const { prisma } = await import("@/server/db/client");
 const { marketDataProvider } = await import("./provider");
-const { getQuote, getHistoricalPrices } = await import("./service");
+const { getQuote, getHistoricalPrices, getIntradayHistory } = await import("./service");
 
 const STOCK_ROW = { id: "stock_1", ticker: "AAPL" };
 
@@ -222,5 +223,84 @@ describe("getHistoricalPrices", () => {
     const call = (prisma.marketDataCacheEntry.findUnique as ReturnType<typeof vi.fn>).mock.calls[0]![0];
     expect(call.where.stockId_dataType_period.period).toBe("1Y");
     expect(call.where.stockId_dataType_period.dataType).toBe("historical");
+  });
+});
+
+function intradayBar(iso: string, close: number) {
+  return { timestamp: iso, open: close, high: close, low: close, close, volume: 1000 };
+}
+
+describe("getIntradayHistory", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("splits a long range into several provider requests, since the provider truncates long ranges", async () => {
+    (marketDataProvider.getIntradayHistory as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      data: [intradayBar("2026-06-01T14:30:00.000Z", 100)],
+    });
+
+    await getIntradayHistory("AAPL", "5min", new Date("2026-06-01"), new Date("2026-08-30"));
+
+    // ~90 days at 5-day chunks is far more than one call; the exact count
+    // is an implementation detail, that it chunks at all is not.
+    expect((marketDataProvider.getIntradayHistory as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(10);
+  });
+
+  it("returns bars oldest-first even when chunks resolve out of order", async () => {
+    (marketDataProvider.getIntradayHistory as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ ok: true, data: [intradayBar("2026-06-10T14:30:00.000Z", 102)] })
+      .mockResolvedValue({ ok: true, data: [intradayBar("2026-06-01T14:30:00.000Z", 100)] });
+
+    const result = await getIntradayHistory("AAPL", "5min", new Date("2026-06-01"), new Date("2026-06-12"));
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const times = result.data.map((b) => new Date(b.timestamp).getTime());
+      expect([...times].sort((a, b) => a - b)).toEqual(times);
+    }
+  });
+
+  it("de-duplicates bars repeated across overlapping chunk boundaries", async () => {
+    const duplicate = intradayBar("2026-06-05T14:30:00.000Z", 101);
+    (marketDataProvider.getIntradayHistory as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      data: [duplicate],
+    });
+
+    const result = await getIntradayHistory("AAPL", "5min", new Date("2026-06-01"), new Date("2026-06-20"));
+
+    expect(result.ok).toBe(true);
+    // Every chunk returned the same bar; it must appear exactly once, or
+    // pattern sample sizes would be silently inflated.
+    if (result.ok) expect(result.data).toHaveLength(1);
+  });
+
+  it("keeps partial data when some chunks fail rather than failing the whole range", async () => {
+    (marketDataProvider.getIntradayHistory as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ ok: false, error: { code: "PROVIDER_ERROR", message: "boom" } })
+      .mockResolvedValue({ ok: true, data: [intradayBar("2026-06-08T14:30:00.000Z", 100)] });
+
+    const result = await getIntradayHistory("AAPL", "5min", new Date("2026-06-01"), new Date("2026-06-20"));
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.data.length).toBeGreaterThan(0);
+  });
+
+  it("surfaces an error when every chunk fails", async () => {
+    (marketDataProvider.getIntradayHistory as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: false,
+      error: { code: "PROVIDER_ERROR", message: "boom" },
+    });
+
+    const result = await getIntradayHistory("AAPL", "5min", new Date("2026-06-01"), new Date("2026-06-20"));
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects a reversed date range", async () => {
+    const result = await getIntradayHistory("AAPL", "5min", new Date("2026-06-20"), new Date("2026-06-01"));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("INVALID_DATE_RANGE");
   });
 });
