@@ -1,5 +1,15 @@
 import type { MarketDataProvider } from "./provider.interface";
-import type { PriceBar, Quote, Result } from "@/lib/types";
+import type { IntradayInterval, PriceBar, Quote, Result } from "@/lib/types";
+import { BARS_PER_TRADING_DAY } from "@/lib/types";
+
+/** Minutes each intraday interval spans, used to space mock bars. */
+const INTERVAL_MINUTES: Record<IntradayInterval, number> = {
+  "1min": 1,
+  "5min": 5,
+  "15min": 15,
+  "30min": 30,
+  "1hour": 60,
+};
 import { logger } from "@/server/logger";
 
 const log = logger.child("market-data:mock");
@@ -102,6 +112,59 @@ export class MockMarketDataProvider implements MarketDataProvider {
     }
 
     log.debug("generated mock history", { ticker, from, to, bars: bars.length });
+    return { ok: true, data: bars };
+  }
+
+  async getIntradayHistory(
+    ticker: string,
+    interval: IntradayInterval,
+    from: Date,
+    to: Date
+  ): Promise<Result<PriceBar[]>> {
+    const validation = validateTicker(ticker);
+    if (!validation.ok) return validation;
+
+    const rng = seededRng(`${ticker}:${interval}`);
+    let price = 20 + rng() * 480;
+    const bars: PriceBar[] = [];
+
+    const minutesPerBar = INTERVAL_MINUTES[interval];
+    const barsPerDay = BARS_PER_TRADING_DAY[interval];
+    const days = Math.max(1, Math.round((to.getTime() - from.getTime()) / 86_400_000));
+
+    for (let d = 0; d <= days; d++) {
+      const day = new Date(from);
+      day.setDate(day.getDate() + d);
+      if (day > to) break;
+      // Skip weekends so mock bars land on plausible session days.
+      const weekday = day.getDay();
+      if (weekday === 0 || weekday === 6) continue;
+
+      for (let b = 0; b < barsPerDay; b++) {
+        // 09:30 session open, advancing by the interval.
+        const ts = new Date(day);
+        ts.setHours(9, 30 + b * minutesPerBar, 0, 0);
+
+        const drift = (rng() - 0.49) * 0.004;
+        price = Math.max(1, price * (1 + drift));
+
+        const open = price * (1 + (rng() - 0.5) * 0.002);
+        const close = price;
+        const high = Math.max(open, close) * (1 + rng() * 0.0015);
+        const low = Math.min(open, close) * (1 - rng() * 0.0015);
+
+        bars.push({
+          timestamp: ts.toISOString(),
+          open: round2(open),
+          high: round2(high),
+          low: round2(low),
+          close: round2(close),
+          volume: Math.floor(50_000 + rng() * 900_000),
+        });
+      }
+    }
+
+    log.debug("generated mock intraday history", { ticker, interval, bars: bars.length });
     return { ok: true, data: bars };
   }
 

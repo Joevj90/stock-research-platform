@@ -1,6 +1,13 @@
 import { prisma } from "@/server/db/client";
 import { logger } from "@/server/logger";
-import type { HistoricalPeriod, PriceBar, Quote, Result, StockSnapshot } from "@/lib/types";
+import type {
+  HistoricalPeriod,
+  IntradayInterval,
+  PriceBar,
+  Quote,
+  Result,
+  StockSnapshot,
+} from "@/lib/types";
 import { marketDataProvider } from "./provider";
 import {
   HISTORICAL_CACHE_TTL_MS,
@@ -215,6 +222,34 @@ export async function getPeerSymbols(rawTicker: string, limit = 5): Promise<Resu
     return { ok: false, error: { code: "MISSING_TICKER", message: "Ticker symbol is required." } };
   }
   return marketDataProvider.getPeerSymbols(ticker, limit);
+}
+
+/**
+ * Intraday OHLCV bars for short-term chart analysis, oldest first.
+ *
+ * Deliberately NOT cached in the database, unlike quotes and daily
+ * history. Intraday requests span short, arbitrary windows and a
+ * single 5-minute range can run to thousands of rows, so caching them
+ * would bloat the store for data that is only read during an explicit
+ * short-term analysis. If that changes, cache.ts is where it would go.
+ */
+export async function getIntradayHistory(
+  rawTicker: string,
+  interval: IntradayInterval,
+  from: Date,
+  to: Date
+): Promise<Result<PriceBar[]>> {
+  const ticker = rawTicker.trim().toUpperCase();
+  if (!ticker) {
+    return { ok: false, error: { code: "MISSING_TICKER", message: "Ticker symbol is required." } };
+  }
+  if (from > to) {
+    return {
+      ok: false,
+      error: { code: "INVALID_DATE_RANGE", message: "`from` date must not be after `to` date." },
+    };
+  }
+  return marketDataProvider.getIntradayHistory(ticker, interval, from, to);
 }
 
 export async function getStockSnapshot(

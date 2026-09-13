@@ -1,4 +1,4 @@
-import type { DataProviderId, PriceBar, Quote, Result } from "@/lib/types";
+import type { DataProviderId, IntradayInterval, PriceBar, Quote, Result } from "@/lib/types";
 
 /**
  * Contract every market-data provider (mock, FMP, Alpha Vantage, Finnhub,
@@ -23,6 +23,20 @@ export interface MarketDataProvider {
    * deal in dates, never in the app's period vocabulary, so a provider
    * swap never has to know what "1Y" means. */
   getHistory(ticker: string, from: Date, to: Date): Promise<Result<PriceBar[]>>;
+
+  /** Intraday OHLCV bars at the given interval for a date range,
+   * oldest first. Added for short-term chart analysis, which needs
+   * finer-grained bars than the daily ones `getHistory` returns.
+   * Confirmed available on FMP's Starter plan by direct request, despite
+   * FMP's own plan-comparison page listing intraday charts as a Premium
+   * feature — so any provider implementing this should verify
+   * empirically rather than trusting published plan documentation. */
+  getIntradayHistory(
+    ticker: string,
+    interval: IntradayInterval,
+    from: Date,
+    to: Date
+  ): Promise<Result<PriceBar[]>>;
 
   /** Up to `limit` peer/competitor ticker symbols for comparison purposes
    * (same sector/exchange/market-cap range, as defined by the provider).

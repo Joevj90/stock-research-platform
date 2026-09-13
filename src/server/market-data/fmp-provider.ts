@@ -1,5 +1,5 @@
 import type { MarketDataProvider } from "./provider.interface";
-import type { PriceBar, Quote, Result } from "@/lib/types";
+import type { IntradayInterval, PriceBar, Quote, Result } from "@/lib/types";
 import { logger } from "@/server/logger";
 
 const log = logger.child("market-data:fmp");
@@ -122,6 +122,55 @@ export class FmpMarketDataProvider implements MarketDataProvider {
         close: r.close,
         volume: r.volume,
       }))
+      .reverse();
+
+    return { ok: true, data: bars };
+  }
+
+  async getIntradayHistory(
+    ticker: string,
+    interval: IntradayInterval,
+    from: Date,
+    to: Date
+  ): Promise<Result<PriceBar[]>> {
+    const validation = validateTicker(ticker);
+    if (!validation.ok) return validation;
+
+    const result = await this.fetchJson<FmpHistoricalRow[] | { symbol: string }>(
+      `/historical-chart/${interval}`,
+      { symbol: ticker, from: toDateStr(from), to: toDateStr(to) }
+    );
+    if (!result.ok) return result;
+
+    if (!Array.isArray(result.data) || result.data.length === 0) {
+      return {
+        ok: false,
+        error: {
+          code: "INVALID_TICKER",
+          message: `No intraday data found for ticker "${ticker}" at ${interval}.`,
+        },
+      };
+    }
+
+    const bars: PriceBar[] = result.data
+      .map((r) => ({
+        timestamp: new Date(r.date).toISOString(),
+        open: r.open,
+        high: r.high,
+        low: r.low,
+        close: r.close,
+        // FMP returns some intraday volumes as fractional values
+        // (e.g. 374407.3955800012 next to clean integers). Volume is a
+        // share count, so the fraction is a provider artifact; rounding
+        // keeps downstream volume comparisons honest without pretending
+        // the extra precision means anything.
+        volume: Math.round(r.volume),
+      }))
+      // Same as getHistory: FMP returns most-recent-first, the app's
+      // convention is oldest-first. This matters more here than
+      // anywhere else in the app, because every pattern detector and the
+      // backtest assume chronological order and would silently invert
+      // their conclusions on reversed input.
       .reverse();
 
     return { ok: true, data: bars };

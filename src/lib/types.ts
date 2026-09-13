@@ -13,6 +13,25 @@ export interface PriceBar {
   volume: number;
 }
 
+/** Supported intraday bar intervals. These are the FMP `/historical-chart`
+ * interval segments, which the app treats as its own vocabulary so a
+ * provider swap doesn't leak through. */
+export type IntradayInterval = "1min" | "5min" | "15min" | "30min" | "1hour";
+
+/** Approximate number of intraday bars in one US regular trading session
+ * (6.5 hours), used to translate a horizon expressed in days into one
+ * expressed in bars. Approximate by nature: half-days and any
+ * extended-hours bars a provider includes will shift the real count, so
+ * this is only ever used for sizing windows, never for dating a
+ * prediction. */
+export const BARS_PER_TRADING_DAY: Record<IntradayInterval, number> = {
+  "1min": 390,
+  "5min": 78,
+  "15min": 26,
+  "30min": 13,
+  "1hour": 7,
+};
+
 export interface Quote {
   ticker: string;
   price: number;

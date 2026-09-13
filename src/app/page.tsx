@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { TickerSearch } from "@/components/TickerSearch";
 
 export default function HomePage() {
@@ -11,6 +12,9 @@ export default function HomePage() {
         </p>
       </div>
       <TickerSearch />
+      <Link href="/pattern-lab" className="text-xs text-gray-500 hover:text-gray-300">
+        Pattern Lab (experiment) →
+      </Link>
     </main>
   );
 }
