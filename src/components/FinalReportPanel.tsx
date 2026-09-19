@@ -5,6 +5,7 @@ import type {
 } from "@/lib/investment-committee-types";
 import type { FinalReportResult, HorizonReturn, QualityLabel } from "@/lib/final-report-types";
 import type { ForecastHorizonKey, ScenarioOutcome } from "@/lib/forecast-types";
+import { formatPrice } from "@/lib/format-price";
 import { useFinalReportGeneration, FINAL_REPORT_STEPS, GATHER_SUB_STEPS } from "@/hooks/useFinalReportGeneration";
 
 const STEPS = FINAL_REPORT_STEPS;
@@ -118,8 +119,8 @@ function ReportView({ data }: { data: FinalReportResult }) {
             <div className="text-[10px] uppercase tracking-wide text-gray-500">AI Rating</div>
             <div className={`text-xl font-bold tracking-wide ${rating.color}`}>{rating.label}</div>
           </div>
-          <Stat label="Current Price" value={`$${data.quickAnswer.currentPrice.toFixed(2)}`} />
-          <Stat label={`Expected Price (${HORIZON_LABEL[data.quickAnswer.expectedReturnHorizon]})`} value={`$${data.quickAnswer.expectedPrice}`} />
+          <Stat label="Current Price" value={formatPrice(data.quickAnswer.currentPrice)} />
+          <Stat label={`Expected Price (${HORIZON_LABEL[data.quickAnswer.expectedReturnHorizon]})`} value={formatPrice(data.quickAnswer.expectedPrice)} />
           <Stat
             label={`Expected Return (${HORIZON_LABEL[data.quickAnswer.expectedReturnHorizon]})`}
             value={`${data.quickAnswer.expectedReturnPct >= 0 ? "+" : ""}${data.quickAnswer.expectedReturnPct}%`}
@@ -420,7 +421,7 @@ function ScenarioCard({ scenario }: { scenario: ScenarioOutcome }) {
         <span className={`text-xs font-bold uppercase tracking-wide ${color}`}>{scenario.scenario} case</span>
         <span className="text-[10px] text-gray-500">{scenario.probabilityPct}%</span>
       </div>
-      <div className={`mt-1 text-xl font-semibold tabular-nums ${color}`}>${scenario.priceTarget}</div>
+      <div className={`mt-1 text-xl font-semibold tabular-nums ${color}`}>{formatPrice(scenario.priceTarget)}</div>
     </div>
   );
 }
@@ -453,7 +454,7 @@ function HorizonReturnRow({ horizons }: { horizons: HorizonReturn[] }) {
               {positive ? "+" : ""}
               {h.expectedReturnPct}%
             </div>
-            <div className="text-[10px] text-gray-500">${h.expectedPrice}</div>
+            <div className="text-[10px] text-gray-500">{formatPrice(h.expectedPrice)}</div>
           </div>
         );
       })}

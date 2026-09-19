@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { ForecastHorizonKey, ForecastResult, ScenarioOutcome } from "@/lib/forecast-types";
+import { formatPrice } from "@/lib/format-price";
 
 type State =
   | { status: "idle" }
@@ -146,11 +147,11 @@ function ResultView({
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-bg/40 p-3">
         <div>
           <div className="text-[10px] uppercase tracking-wide text-gray-500">Current Price</div>
-          <div className="text-lg font-semibold tabular-nums text-gray-100">${currentPrice.toFixed(2)}</div>
+          <div className="text-lg font-semibold tabular-nums text-gray-100">{formatPrice(currentPrice)}</div>
         </div>
         <div>
           <div className="text-[10px] uppercase tracking-wide text-gray-500">Expected Price</div>
-          <div className="text-lg font-semibold tabular-nums text-gray-100">${horizon.expectedPrice}</div>
+          <div className="text-lg font-semibold tabular-nums text-gray-100">{formatPrice(horizon.expectedPrice)}</div>
         </div>
         <div>
           <div className="text-[10px] uppercase tracking-wide text-gray-500">Expected Return</div>
@@ -242,13 +243,19 @@ function ScenarioRangeChart({
   const range = max - min || 1;
   const pct = (price: number) => ((price - min) / range) * 100;
 
+  // "Now" is labelled ABOVE the bar and the three scenarios BELOW it.
+  // On short horizons the current price usually sits right next to the
+  // base case, and putting every label on one line made them print on
+  // top of each other ("BaseNow$51.5$51.64").
   return (
-    <div className="relative h-10 rounded-md bg-bg/60">
-      <div className="absolute inset-y-0 left-0 w-full rounded-md bg-gradient-to-r from-down/20 via-gray-500/10 to-up/20" />
-      <Marker label="Bear" price={bear.priceTarget} leftPct={pct(bear.priceTarget)} color="text-down" />
-      <Marker label="Base" price={base.priceTarget} leftPct={pct(base.priceTarget)} color="text-gray-200" />
-      <Marker label="Bull" price={bull.priceTarget} leftPct={pct(bull.priceTarget)} color="text-up" />
-      <Marker label="Now" price={currentPrice} leftPct={pct(currentPrice)} color="text-accent" isCurrent />
+    <div className="pb-5 pt-5">
+      <div className="relative h-10 rounded-md bg-bg/60">
+        <div className="absolute inset-y-0 left-0 w-full rounded-md bg-gradient-to-r from-down/20 via-gray-500/10 to-up/20" />
+        <Marker label="Bear" price={bear.priceTarget} leftPct={pct(bear.priceTarget)} color="text-down" position="below" />
+        <Marker label="Base" price={base.priceTarget} leftPct={pct(base.priceTarget)} color="text-gray-200" position="below" />
+        <Marker label="Bull" price={bull.priceTarget} leftPct={pct(bull.priceTarget)} color="text-up" position="below" />
+        <Marker label="Now" price={currentPrice} leftPct={pct(currentPrice)} color="text-accent" position="above" isCurrent />
+      </div>
     </div>
   );
 }
@@ -258,22 +265,26 @@ function Marker({
   price,
   leftPct,
   color,
+  position,
   isCurrent,
 }: {
   label: string;
   price: number;
   leftPct: number;
   color: string;
+  position: "above" | "below";
   isCurrent?: boolean;
 }) {
+  const clamped = Math.min(98, Math.max(2, leftPct));
   return (
-    <div
-      className="absolute top-0 flex -translate-x-1/2 flex-col items-center"
-      style={{ left: `${Math.min(98, Math.max(2, leftPct))}%` }}
-    >
-      <div className={`h-10 w-0.5 ${isCurrent ? "bg-accent" : "bg-gray-500"}`} />
-      <div className={`-mt-1 text-[10px] font-medium ${color}`}>
-        {label} ${price}
+    <div className="absolute inset-y-0 -translate-x-1/2" style={{ left: `${clamped}%` }}>
+      <div className={`h-full w-0.5 ${isCurrent ? "bg-accent" : "bg-gray-500"}`} />
+      <div
+        className={`absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium ${color} ${
+          position === "above" ? "-top-5" : "-bottom-5"
+        }`}
+      >
+        {label} {formatPrice(price)}
       </div>
     </div>
   );
@@ -287,7 +298,7 @@ function ScenarioCard({ scenario, highlight }: { scenario: ScenarioOutcome; high
         <span className={`text-xs font-bold uppercase tracking-wide ${color}`}>{scenario.scenario} case</span>
         <span className="text-[10px] text-gray-500">{scenario.probabilityPct}% likely</span>
       </div>
-      <div className={`mt-1 text-xl font-semibold tabular-nums ${color}`}>${scenario.priceTarget}</div>
+      <div className={`mt-1 text-xl font-semibold tabular-nums ${color}`}>{formatPrice(scenario.priceTarget)}</div>
       <div className={`text-xs tabular-nums ${scenario.expectedReturnPct >= 0 ? "text-up" : "text-down"}`}>
         {scenario.expectedReturnPct >= 0 ? "+" : ""}
         {scenario.expectedReturnPct}%

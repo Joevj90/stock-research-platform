@@ -85,31 +85,31 @@ export function computeExpectedReturnPct(expectedPrice: number, currentPrice: nu
 
 /**
  * "No False Precision" -- rounds a price so the app never implies more
- * accuracy than a forecast can support (no "$183.47" when the real
- * uncertainty is tens of dollars). Enforced structurally here rather
- * than trusted to the AI's own rounding.
+ * accuracy than a forecast can support. Enforced structurally here
+ * rather than trusted to the AI's own rounding.
  *
- * The increments are chosen so the WORST-CASE rounding error stays near
- * half a percent of the price at every magnitude. That proportionality
- * is the point: an earlier version used a flat $0.50 increment for
- * everything under $20, which is 0.3% on a $150 stock but up to 8.8% on
- * a $2.83 one -- a forecast of $2.83 was stored as $3.00, so the
- * rounding alone could dwarf the forecast's real error. Because these
- * rounded figures are what get written into prediction records, that
- * also quietly corrupted accuracy measurement for low-priced stocks,
- * not just their display.
+ * Increments are sized so the worst-case rounding error stays around a
+ * quarter of a percent or less at every price level. Two earlier
+ * versions got this wrong in instructive ways:
+ *   - A flat $0.50 step below $20 was 0.3% on a $150 stock but up to
+ *     8.8% on a $2.83 one (a BBAI forecast of $2.83 stored as $3.00).
+ *   - A $0.50 step for $20-$100 was fine for 12-month forecasts but too
+ *     coarse once 1-week horizons existed: a CAVA 1-week range spanned
+ *     only about +/-6%, so a 0.5% rounding step was a meaningful slice
+ *     of the entire forecast.
+ * These rounded figures are stored in prediction records, so coarse
+ * rounding also quietly worsens measured accuracy, not just display.
  *
- * Any new tier added here should keep the same test: half the increment
- * divided by the price should stay around 0.5% or below.
+ * Note: this only rounds what is shown and stored as a target price.
+ * Returns are computed from unrounded values (see forecasting/service.ts)
+ * so rounding never compounds into the headline percentage.
  */
 export function roundPriceForDisplay(price: number): number {
   if (price <= 0) return 0;
-  if (price < 2) return Math.round(price * 100) / 100; // nearest $0.01
-  if (price < 20) return Math.round(price * 20) / 20; // nearest $0.05
-  if (price < 100) return Math.round(price * 2) / 2; // nearest $0.50
-  if (price < 200) return Math.round(price); // nearest $1
-  if (price < 1000) return Math.round(price / 5) * 5; // nearest $5
-  return Math.round(price / 10) * 10; // nearest $10
+  if (price < 10) return Math.round(price * 100) / 100; // nearest $0.01
+  if (price < 100) return Math.round(price * 20) / 20; // nearest $0.05
+  if (price < 1000) return Math.round(price * 2) / 2; // nearest $0.50
+  return Math.round(price); // nearest $1
 }
 
 export function roundReturnPct(pct: number): number {

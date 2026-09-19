@@ -291,3 +291,101 @@ describe("runForecast", () => {
     if (result.ok) expect(result.data.currentPrice).toBe(199);
   });
 });
+
+describe("runForecast — rounding never compounds into returns", () => {
+  // The exact CAVA 1-week case that exposed this: bear $48.50 / base
+  // $51.50 / bull $54.50 at 30/50/20 against a $51.64 price. The true
+  // expected price is $51.20 (-0.85%); rounding it to $51.00 first and
+  // computing the return from that reported -1.2%.
+  function cavaGathered() {
+    const none = null;
+    return {
+      companyName: "CAVA Group",
+      currentPrice: 51.64,
+      inputsUsed: {
+        technical: false,
+        fundamental: false,
+        valuation: false,
+        sentiment: false,
+        macro: false,
+        competitor: false,
+        management: false,
+        risk: false,
+      },
+      summaries: {
+        valuationDcfEstimates: none,
+        technicalSummary: none,
+        fundamentalSummary: none,
+        sentimentSummary: none,
+        macroSummary: none,
+        competitorSummary: none,
+        managementSummary: none,
+        riskSummary: none,
+      },
+      full: {
+        technical: none,
+        fundamental: none,
+        valuation: none,
+        sentiment: none,
+        macro: none,
+        competitor: none,
+        management: none,
+        risk: none,
+        news: none,
+      },
+    };
+  }
+
+  it("computes expected return from the unrounded expected price", async () => {
+    const cavaHorizon = {
+      horizon: "1_week" as const,
+      dataSupportsThisHorizon: true,
+      limitationNote: null,
+      bear: { ...VALID_SCENARIO, priceTarget: 48.5, probabilityPct: 30 },
+      base: { ...VALID_SCENARIO, priceTarget: 51.5, probabilityPct: 50 },
+      bull: { ...VALID_SCENARIO, priceTarget: 54.5, probabilityPct: 20 },
+      mostLikelyScenario: "base" as const,
+    };
+    (interpretForecast as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      data: { ...SAMPLE_RAW_INTERPRETATION, horizons: [cavaHorizon] },
+    });
+
+    const result = await runForecast("CAVA", cavaGathered());
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const week = result.data.interpretation.horizons[0]!;
+      expect(week.expectedPrice).toBeCloseTo(51.2, 5);
+      // (51.20 - 51.64) / 51.64 = -0.852% -> -0.9, not -1.2.
+      expect(week.expectedReturnPct).toBeCloseTo(-0.9, 5);
+    }
+  });
+
+  it("computes scenario returns from the AI's unrounded targets", async () => {
+    const h = {
+      horizon: "1_week" as const,
+      dataSupportsThisHorizon: true,
+      limitationNote: null,
+      bear: { ...VALID_SCENARIO, priceTarget: 48.53, probabilityPct: 30 },
+      base: { ...VALID_SCENARIO, priceTarget: 51.52, probabilityPct: 50 },
+      bull: { ...VALID_SCENARIO, priceTarget: 54.52, probabilityPct: 20 },
+      mostLikelyScenario: "base" as const,
+    };
+    (interpretForecast as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      data: { ...SAMPLE_RAW_INTERPRETATION, horizons: [h] },
+    });
+
+    const result = await runForecast("CAVA", cavaGathered());
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const week = result.data.interpretation.horizons[0]!;
+      // Displayed target is rounded to the nearest 5 cents...
+      expect(week.bear.priceTarget).toBeCloseTo(48.55, 5);
+      // ...but the return comes from the raw $48.53: -6.02% -> -6.0.
+      expect(week.bear.expectedReturnPct).toBeCloseTo(-6.0, 5);
+    }
+  });
+});

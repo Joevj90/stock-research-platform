@@ -108,12 +108,15 @@ function finalizeInterpretation(raw: RawForecastInterpretation, currentPrice: nu
     const basePrice = roundPriceForDisplay(h.base.priceTarget);
     const bullPrice = roundPriceForDisplay(h.bull.priceTarget);
 
+    // Scenario returns use the AI's unrounded targets for the same reason
+    // the expected return does (see below); the rounded prices are what
+    // get displayed and stored as targets.
     const bear: ScenarioOutcome = {
       scenario: "bear",
       explanation: h.bear.explanation,
       estimatedFinancialOutcome: h.bear.estimatedFinancialOutcome,
       priceTarget: bearPrice,
-      expectedReturnPct: roundReturnPct(computeExpectedReturnPct(bearPrice, currentPrice)),
+      expectedReturnPct: roundReturnPct(computeExpectedReturnPct(h.bear.priceTarget, currentPrice)),
       probabilityPct: normalizedProbs.bear,
       mainReasons: h.bear.mainReasons,
       keyRisks: h.bear.keyRisks,
@@ -123,7 +126,7 @@ function finalizeInterpretation(raw: RawForecastInterpretation, currentPrice: nu
       explanation: h.base.explanation,
       estimatedFinancialOutcome: h.base.estimatedFinancialOutcome,
       priceTarget: basePrice,
-      expectedReturnPct: roundReturnPct(computeExpectedReturnPct(basePrice, currentPrice)),
+      expectedReturnPct: roundReturnPct(computeExpectedReturnPct(h.base.priceTarget, currentPrice)),
       probabilityPct: normalizedProbs.base,
       mainReasons: h.base.mainReasons,
       keyRisks: h.base.keyRisks,
@@ -133,7 +136,7 @@ function finalizeInterpretation(raw: RawForecastInterpretation, currentPrice: nu
       explanation: h.bull.explanation,
       estimatedFinancialOutcome: h.bull.estimatedFinancialOutcome,
       priceTarget: bullPrice,
-      expectedReturnPct: roundReturnPct(computeExpectedReturnPct(bullPrice, currentPrice)),
+      expectedReturnPct: roundReturnPct(computeExpectedReturnPct(h.bull.priceTarget, currentPrice)),
       probabilityPct: normalizedProbs.bull,
       mainReasons: h.bull.mainReasons,
       keyRisks: h.bull.keyRisks,
@@ -154,7 +157,14 @@ function finalizeInterpretation(raw: RawForecastInterpretation, currentPrice: nu
       base,
       bull,
       expectedPrice,
-      expectedReturnPct: roundReturnPct(computeExpectedReturnPct(expectedPrice, currentPrice)),
+      // Computed from the UNROUNDED expected price. Rounding is for
+      // display only; feeding the rounded figure back into the return
+      // calculation compounds two roundings into the headline number.
+      // On short horizons, where the whole expected move can be under
+      // 1%, that is enough to change the answer: a CAVA 1-week forecast
+      // with a true expected price of $51.20 was rounded to $51.00 and
+      // reported as -1.2% when the real figure was -0.9%.
+      expectedReturnPct: roundReturnPct(computeExpectedReturnPct(expectedPriceRaw, currentPrice)),
       mostLikelyScenario: h.mostLikelyScenario,
     };
   });
