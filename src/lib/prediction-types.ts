@@ -82,10 +82,24 @@ export interface HorizonAccuracy {
   /** Standard error of the accuracy rate, in percentage points. An edge
    * smaller than roughly twice this is indistinguishable from chance. */
   standardErrorPct: number | null;
-  /** True only when the sample clears MIN_SAMPLE_FOR_EDGE_VERDICT AND
-   * the edge exceeds two standard errors. A large edge on six
-   * predictions is not a finding. */
+  /** How many different calendar weeks these predictions were made in.
+   * Predictions made in the same week share one market move -- if the
+   * whole market falls, nearly every stock falls together -- so 27
+   * predictions from one week are closer to one test than to 27. */
+  distinctWeeks: number;
+  /** True only when the sample clears the minimum count, spans enough
+   * separate weeks, AND the edge exceeds two standard errors. A large
+   * edge on six predictions, or on thirty from a single week, is not a
+   * finding. */
   isEdgeMeaningful: boolean;
+
+  /** Of the predictions where the AI expected only a small move (within
+   * +/-2%), how many there were and how often the stock really did stay
+   * within that band. A separate question from direction: calling
+   * "roughly flat" correctly is useful even when the tiny predicted
+   * direction was wrong. */
+  flatCallCount: number;
+  flatCallStayedFlatPct: number | null;
 }
 
 export interface RangeAccuracy {
@@ -109,6 +123,17 @@ export interface ConfidenceCalibration {
   explanation: string;
 }
 
+/**
+ * What would have happened by FOLLOWING each AI call: buying when it
+ * predicted a rise, short-selling when it predicted a fall. Every
+ * return here is signed in the call's favour, so a bearish call on a
+ * stock that fell 4% is a +4% win.
+ *
+ * An earlier version simply averaged the stocks' own returns and
+ * counted "winning" as "the stock went up" -- which described the
+ * market that week, not the AI, and marked every correct bearish call
+ * as a loss.
+ */
 export interface SimulatedPerformance {
   label: "SIMULATED / HISTORICAL — NOT ACTUAL TRADING RESULTS";
   evaluatedCount: number;

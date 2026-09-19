@@ -3,6 +3,32 @@
 import { useEffect, useState } from "react";
 import type { AccuracyDashboard, PredictionHistoryResult, PredictionRecord } from "@/lib/prediction-types";
 import type { ForecastHorizonKey } from "@/lib/forecast-types";
+import { isCallCorrect } from "@/lib/prediction-scoring";
+import { formatPrice } from "@/lib/format-price";
+
+/** Correct/Wrong for one prediction under the same rule the summary
+ * statistics use, so a row can never disagree with the totals. */
+function callResult(p: PredictionRecord): "pending" | "correct" | "wrong" | "no_call" {
+  if (p.evaluatedAt === null || p.actualReturnPct === null) return "pending";
+  const correct = isCallCorrect(p.expectedReturnPct, p.actualReturnPct);
+  if (correct === null) return "no_call";
+  return correct ? "correct" : "wrong";
+}
+
+const MIN_WEEKS = 4;
+const MIN_SAMPLE = 30;
+
+/** e.g. "Need 3 more, 3 more weeks" -- names every requirement still
+ * missing so the verdict can't look closer than it is. */
+function needLabel(count: number, weeks: number): string {
+  const parts: string[] = [];
+  if (count < MIN_SAMPLE) parts.push(`${MIN_SAMPLE - count} more`);
+  if (weeks < MIN_WEEKS) {
+    const w = MIN_WEEKS - weeks;
+    parts.push(`${w} more week${w === 1 ? "" : "s"}`);
+  }
+  return `Need ${parts.join(", ")}`;
+}
 
 type HistoryState =
   | { status: "idle" }
@@ -120,18 +146,24 @@ function TickerHistory({ result }: { result: PredictionHistoryResult }) {
               <tr key={p.id} className="border-t border-border/50">
                 <td className="py-1.5 pr-3">{new Date(p.predictionDate).toLocaleDateString()}</td>
                 <td className="px-2 py-1.5">{HORIZON_LABEL[p.horizon]}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums">${p.expectedPrice}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums">{formatPrice(p.expectedPrice)}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">
-                  {p.actualPrice !== null ? `$${p.actualPrice.toFixed(2)}` : "—"}
+                  {p.actualPrice !== null ? formatPrice(p.actualPrice) : "—"}
                 </td>
                 <td className="px-2 py-1.5">
-                  {p.directionCorrect === null ? (
-                    <span className="text-gray-500">Pending ({new Date(p.evaluationDueDate).toLocaleDateString()})</span>
-                  ) : p.directionCorrect ? (
-                    <span className="font-medium text-up">Correct</span>
-                  ) : (
-                    <span className="font-medium text-down">Wrong</span>
-                  )}
+                  {(() => {
+                    const r = callResult(p);
+                    if (r === "pending")
+                      return (
+                        <span className="text-gray-500">Pending ({new Date(p.evaluationDueDate).toLocaleDateString()})</span>
+                      );
+                    if (r === "no_call") return <span className="text-gray-500">No direction to grade</span>;
+                    return r === "correct" ? (
+                      <span className="font-medium text-up">Correct</span>
+                    ) : (
+                      <span className="font-medium text-down">Wrong</span>
+                    );
+                  })()}
                 </td>
               </tr>
             ))}
@@ -176,6 +208,7 @@ function PredictionChart({ predictions }: { predictions: PredictionRecord[] }) {
         const startY = y(p.priceAtPrediction);
         const predictedY = y(p.expectedPrice);
         const actualY = p.actualPrice !== null ? y(p.actualPrice) : null;
+        const resultColor = callResult(p) === "correct" ? "#4ade80" : callResult(p) === "wrong" ? "#f87171" : "#9ca3af";
 
         return (
           <g key={p.id}>
@@ -186,8 +219,8 @@ function PredictionChart({ predictions }: { predictions: PredictionRecord[] }) {
             {/* Actual line, if evaluated */}
             {actualY !== null && (
               <>
-                <line x1={predictionX} y1={startY} x2={dueX} y2={actualY} stroke={p.directionCorrect ? "#4ade80" : "#f87171"} strokeWidth={2} />
-                <circle cx={dueX} cy={actualY} r={3.5} fill={p.directionCorrect ? "#4ade80" : "#f87171"} />
+                <line x1={predictionX} y1={startY} x2={dueX} y2={actualY} stroke={resultColor} strokeWidth={2} />
+                <circle cx={dueX} cy={actualY} r={3.5} fill={resultColor} />
               </>
             )}
             {i === 0 && (
@@ -224,7 +257,7 @@ function AccuracyDashboardView({ dashboard }: { dashboard: AccuracyDashboard }) 
       ) : (
         <p className="mt-2 text-xs text-gray-400">
           The AI correctly predicted whether the stock would rise or fall in {dashboard.correctCount} out of{" "}
-          {dashboard.evaluatedPredictions} completed predictions.
+          {dashboard.correctCount + dashboard.incorrectCount} completed predictions.
         </p>
       )}
 
@@ -234,7 +267,10 @@ function AccuracyDashboardView({ dashboard }: { dashboard: AccuracyDashboard }) 
         </h4>
         <p className="mb-2 text-[11px] text-gray-500">
           An accuracy figure on its own can&apos;t be read. If these stocks rose 60% of the time, then scoring 60%
-          means the analysis added nothing over always guessing up. The Edge column is the real result.
+          means the analysis added nothing over always guessing up. The Edge column is the real result. Both the
+          AI and &quot;no analysis&quot; are graded the same way: did the stock go the direction called? A verdict also
+          needs predictions from at least {MIN_WEEKS} different weeks, because stocks in the same week tend to move
+          together.
         </p>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
@@ -242,6 +278,7 @@ function AccuracyDashboardView({ dashboard }: { dashboard: AccuracyDashboard }) 
               <tr className="text-gray-500">
                 <th className="px-2 py-1 font-medium">Horizon</th>
                 <th className="px-2 py-1 font-medium">N</th>
+                <th className="px-2 py-1 font-medium">Weeks</th>
                 <th className="px-2 py-1 font-medium">AI</th>
                 <th className="px-2 py-1 font-medium">No analysis</th>
                 <th className="px-2 py-1 font-medium">Edge</th>
@@ -253,6 +290,7 @@ function AccuracyDashboardView({ dashboard }: { dashboard: AccuracyDashboard }) 
                 <tr key={h.horizon} className="border-t border-border">
                   <td className="px-2 py-1 text-gray-300">{HORIZON_LABEL[h.horizon]}</td>
                   <td className="px-2 py-1 tabular-nums text-gray-400">{h.evaluatedCount}</td>
+                  <td className="px-2 py-1 tabular-nums text-gray-400">{h.distinctWeeks}</td>
                   <td className="px-2 py-1 tabular-nums text-gray-200">
                     {h.directionAccuracyPct !== null ? `${h.directionAccuracyPct.toFixed(0)}%` : "—"}
                   </td>
@@ -273,8 +311,8 @@ function AccuracyDashboardView({ dashboard }: { dashboard: AccuracyDashboard }) 
                       <span className={h.edgePct !== null && h.edgePct > 0 ? "text-up" : "text-down"}>
                         {h.edgePct !== null && h.edgePct > 0 ? "Beats no analysis" : "Worse than no analysis"}
                       </span>
-                    ) : h.evaluatedCount < 30 ? (
-                      <span className="text-gray-500">Need {30 - h.evaluatedCount} more</span>
+                    ) : h.evaluatedCount < MIN_SAMPLE || h.distinctWeeks < MIN_WEEKS ? (
+                      <span className="text-gray-500">{needLabel(h.evaluatedCount, h.distinctWeeks)}</span>
                     ) : (
                       <span className="text-gray-500">Within noise</span>
                     )}
@@ -284,6 +322,19 @@ function AccuracyDashboardView({ dashboard }: { dashboard: AccuracyDashboard }) 
             </tbody>
           </table>
         </div>
+        {dashboard.accuracyByHorizon.some((h) => h.flatCallStayedFlatPct !== null) && (
+          <p className="mt-2 text-[11px] text-gray-500">
+            Small-move calls (the AI expected under a 2% move):{" "}
+            {dashboard.accuracyByHorizon
+              .filter((h) => h.flatCallStayedFlatPct !== null)
+              .map(
+                (h) =>
+                  `${HORIZON_LABEL[h.horizon]}: ${h.flatCallStayedFlatPct!.toFixed(0)}% stayed within 2% (${h.flatCallCount} calls)`
+              )
+              .join(" · ")}
+            . This is a separate question from direction.
+          </p>
+        )}
       </div>
 
       <div className="mt-3 rounded-md border border-border bg-bg/40 p-2.5 text-xs">
@@ -309,10 +360,18 @@ function AccuracyDashboardView({ dashboard }: { dashboard: AccuracyDashboard }) 
         {dashboard.simulatedPerformance.evaluatedCount === 0 ? (
           <p className="mt-1 text-gray-400">No completed predictions yet.</p>
         ) : (
-          <p className="mt-1 text-gray-300">
-            Average return per prediction: {dashboard.simulatedPerformance.averageReturnPct?.toFixed(1)}% ·{" "}
-            {dashboard.simulatedPerformance.winningCount} winning, {dashboard.simulatedPerformance.losingCount} losing
-          </p>
+          <>
+            <p className="mt-1 text-gray-300">
+              If you had followed every call: average {dashboard.simulatedPerformance.averageReturnPct! >= 0 ? "+" : ""}
+              {dashboard.simulatedPerformance.averageReturnPct?.toFixed(1)}% per call ·{" "}
+              {dashboard.simulatedPerformance.winningCount} won, {dashboard.simulatedPerformance.losingCount} lost
+            </p>
+            <p className="mt-0.5 text-[11px] text-gray-500">
+              &quot;Following&quot; means buying when the AI predicted a rise and short-selling when it predicted a fall, so a
+              correct bearish call counts as a win. Ignores trading costs, and treats overlapping trades as if taken
+              one after another.
+            </p>
+          </>
         )}
       </div>
     </div>

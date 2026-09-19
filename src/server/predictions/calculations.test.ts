@@ -50,11 +50,26 @@ function prediction(overrides: Partial<PredictionRecord> = {}): PredictionRecord
   };
 }
 
+/** Each fixture lands in a different week, so tests that need a verdict
+ * aren't blocked by the separate-weeks requirement unless they set dates
+ * themselves. */
+let fixtureWeek = 0;
+function nextWeekDate(): string {
+  fixtureWeek++;
+  return new Date(Date.UTC(2026, 0, 5 + fixtureWeek * 7)).toISOString();
+}
+
+/** Correctness is expressed through the returns, since that is what the
+ * scoring reads: the default call is +12% (up), so "wrong" means the
+ * stock fell. Passing `directionCorrect: false` flips the actual return
+ * unless the test sets one explicitly. */
 function evaluatedPrediction(overrides: Partial<PredictionRecord> = {}): PredictionRecord {
+  const wrong = overrides.directionCorrect === false && overrides.actualReturnPct === undefined;
   return prediction({
+    predictionDate: nextWeekDate(),
     actualPrice: 108,
     evaluatedAt: "2026-04-01T00:00:00.000Z",
-    actualReturnPct: 8,
+    actualReturnPct: wrong ? -8 : 8,
     predictionErrorAbs: -4,
     predictionErrorPct: -3.6,
     directionCorrect: true,
@@ -329,10 +344,13 @@ describe("computeAccuracyByHorizon — baseline comparison", () => {
   /** A resolved prediction: `up` is what the market actually did,
    * `correct` is whether the AI called that direction. */
   function resolved(up: boolean, correct: boolean) {
+    const calledUp = correct ? up : !up;
     return prediction({
       horizon: "1_week",
+      predictionDate: nextWeekDate(),
       evaluatedAt: new Date().toISOString(),
       directionCorrect: correct,
+      expectedReturnPct: calledUp ? 3 : -3,
       actualReturnPct: up ? 4 : -4,
     });
   }
@@ -409,5 +427,123 @@ describe("computeAccuracyByHorizon — baseline comparison", () => {
     const [oneWeek] = computeAccuracyByHorizon(records, ["1_week"]);
     // All six directional outcomes rose, so the baseline is 100%.
     expect(oneWeek!.baselineAccuracyPct).toBeCloseTo(100, 5);
+  });
+});
+
+describe("scoring fairness — AI and baseline graded by the same rule", () => {
+  function weekly(
+    expectedReturnPct: number,
+    actualReturnPct: number,
+    date = "2026-09-08T14:00:00.000Z"
+  ): PredictionRecord {
+    return prediction({
+      horizon: "1_week",
+      predictionDate: date,
+      evaluatedAt: "2026-09-15T14:00:00.000Z",
+      expectedReturnPct,
+      actualReturnPct,
+      directionCorrect: false, // the old three-outcome flag; scoring must ignore it
+    });
+  }
+
+  it("counts a small bearish call as correct when the stock falls a lot", () => {
+    // The exact case that broke the old scoring: AI predicts -0.9% ("flat"
+    // under the old rule), stock falls 4%. It called the direction.
+    const [week] = computeAccuracyByHorizon(
+      Array.from({ length: 5 }, () => weekly(-0.9, -4)),
+      ["1_week"]
+    );
+    expect(week!.directionAccuracyPct).toBeCloseTo(100, 5);
+    expect(week!.edgePct).toBeCloseTo(0, 5); // matched the market, added nothing
+  });
+
+  it("ignores the stored three-outcome flag entirely", () => {
+    const [week] = computeAccuracyByHorizon(
+      Array.from({ length: 4 }, () => weekly(3, 5)),
+      ["1_week"]
+    );
+    expect(week!.correctCount).toBe(4);
+  });
+
+  it("excludes calls with no direction from accuracy and baseline alike", () => {
+    const [week] = computeAccuracyByHorizon(
+      [weekly(0, 5), weekly(2, 0), weekly(2, 3), weekly(2, 3), weekly(-2, 3)],
+      ["1_week"]
+    );
+    expect(week!.evaluatedCount).toBe(3);
+  });
+
+  it("measures small-move calls separately from direction", () => {
+    const [week] = computeAccuracyByHorizon(
+      [weekly(-0.9, -4), weekly(0.5, 1), weekly(1.5, -1.8), weekly(8, 9)],
+      ["1_week"]
+    );
+    expect(week!.flatCallCount).toBe(3); // the 8% call isn't a flat call
+    expect(week!.flatCallStayedFlatPct).toBeCloseTo((2 / 3) * 100, 5);
+  });
+});
+
+describe("separate-weeks requirement", () => {
+  it("refuses a verdict when every prediction comes from the same week, however many there are", () => {
+    // 40 predictions, AI right on all of them, market split -- a huge
+    // edge, but all from one week, so one market move could explain it.
+    const records = Array.from({ length: 40 }, (_, i) =>
+      prediction({
+        horizon: "1_week",
+        predictionDate: "2026-09-08T14:00:00.000Z",
+        evaluatedAt: "2026-09-15T14:00:00.000Z",
+        expectedReturnPct: i % 2 === 0 ? 3 : -3,
+        actualReturnPct: i % 2 === 0 ? 4 : -4,
+      })
+    );
+    const [week] = computeAccuracyByHorizon(records, ["1_week"]);
+    expect(week!.distinctWeeks).toBe(1);
+    expect(week!.isEdgeMeaningful).toBe(false);
+  });
+
+  it("counts predictions made on different days of the same week as one week", () => {
+    const days = ["2026-09-07", "2026-09-09", "2026-09-11", "2026-09-13"]; // Mon-Sun
+    const records = days.map((d) =>
+      prediction({
+        horizon: "1_week",
+        predictionDate: `${d}T14:00:00.000Z`,
+        evaluatedAt: "2026-09-20T14:00:00.000Z",
+        expectedReturnPct: 3,
+        actualReturnPct: 4,
+      })
+    );
+    const [week] = computeAccuracyByHorizon(records, ["1_week"]);
+    expect(week!.distinctWeeks).toBe(1);
+  });
+
+  it("withholds the confidence verdict until predictions span enough weeks", () => {
+    const records = Array.from({ length: 12 }, () =>
+      prediction({
+        predictionDate: "2026-09-08T14:00:00.000Z",
+        evaluatedAt: "2026-09-15T14:00:00.000Z",
+        confidenceScore: 90,
+        expectedReturnPct: 3,
+        actualReturnPct: -4,
+      })
+    );
+    expect(computeConfidenceCalibration(records).verdict).toBe("insufficient_data");
+  });
+});
+
+describe("computeSimulatedPerformance — follows each call", () => {
+  it("counts a correct bearish call as a win", () => {
+    const result = computeSimulatedPerformance([
+      evaluatedPrediction({ expectedReturnPct: -2, actualReturnPct: -4 }),
+    ]);
+    expect(result.winningCount).toBe(1);
+    expect(result.averageReturnPct).toBeCloseTo(4, 5);
+  });
+
+  it("counts a wrong bearish call as a loss", () => {
+    const result = computeSimulatedPerformance([
+      evaluatedPrediction({ expectedReturnPct: -2, actualReturnPct: 5 }),
+    ]);
+    expect(result.losingCount).toBe(1);
+    expect(result.averageReturnPct).toBeCloseTo(-5, 5);
   });
 });

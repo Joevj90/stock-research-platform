@@ -10,6 +10,7 @@ import type {
   RatingPerformance,
   SimulatedPerformance,
 } from "@/lib/prediction-types";
+import { isCallCorrect, isFlatCall, stayedFlat } from "@/lib/prediction-scoring";
 
 /**
  * Deterministic prediction-tracking arithmetic -- "Perform all
@@ -28,6 +29,11 @@ const MIN_SAMPLE_PER_HORIZON = 3;
  * beats a naive baseline is a much stronger claim and needs a real
  * sample behind it. Same gate the chart-pattern backtest uses. */
 const MIN_SAMPLE_FOR_EDGE_VERDICT = 30;
+/** Predictions made in the same week share one market move, so a verdict
+ * also needs predictions spread across several separate weeks. Four is a
+ * floor, not a guarantee: it stops a single broad rally or selloff from
+ * deciding the result on its own. */
+const MIN_WEEKS_FOR_EDGE_VERDICT = 4;
 const MIN_SAMPLE_FOR_CALIBRATION = 10;
 
 export function computeActualReturnPct(actualPrice: number, originalPrice: number): number {
@@ -46,7 +52,14 @@ export function computePredictionErrorPct(actualPrice: number, predictedPrice: n
 
 /** Buckets a return into up/flat/down using a small threshold so
  * near-zero moves aren't treated as a meaningful direction, then
- * compares the predicted and actual buckets. */
+ * compares the predicted and actual buckets.
+ *
+ * NOTE: this three-outcome result is still written to each prediction
+ * record when it's evaluated (the database column already exists), but
+ * NO statistic or UI label reads it any more. Every accuracy figure uses
+ * `isCallCorrect` from @/lib/prediction-scoring instead, which grades the
+ * AI by the same up-or-down rule as the "no analysis" baseline. See that
+ * file for why the three-outcome rule made the comparison unfair. */
 export function determineDirectionCorrect(predictedReturnPct: number, actualReturnPct: number): boolean {
   return bucketDirection(predictedReturnPct) === bucketDirection(actualReturnPct);
 }
@@ -108,8 +121,12 @@ export function isReadyForEvaluation(evaluationDueDate: Date, now: Date = new Da
 
 // --- Aggregate statistics over already-evaluated predictions ---
 
+/** A prediction counts as evaluated once it has an evaluation date and a
+ * real actual return -- the two things every statistic here reads. It
+ * no longer depends on the stored three-outcome `directionCorrect`
+ * flag, which nothing reads any more (see determineDirectionCorrect). */
 function evaluatedOnly(predictions: PredictionRecord[]): PredictionRecord[] {
-  return predictions.filter((p) => p.evaluatedAt !== null && p.directionCorrect !== null);
+  return predictions.filter((p) => p.evaluatedAt !== null && p.actualReturnPct !== null);
 }
 
 function average(values: number[]): number | null {
@@ -117,27 +134,45 @@ function average(values: number[]): number | null {
   return values.reduce((s, v) => s + v, 0) / values.length;
 }
 
+/** Evaluated predictions that make a gradeable direction call (see
+ * `isCallCorrect`), paired with the result. Accuracy, the baseline and
+ * the simulated returns all draw from exactly this set, so none of them
+ * is computed over different predictions than the others. */
+function scoredCalls(predictions: PredictionRecord[]): { p: PredictionRecord; correct: boolean }[] {
+  const out: { p: PredictionRecord; correct: boolean }[] = [];
+  for (const p of evaluatedOnly(predictions)) {
+    const correct = isCallCorrect(p.expectedReturnPct, p.actualReturnPct);
+    if (correct !== null) out.push({ p, correct });
+  }
+  return out;
+}
+
+/** Identifies the calendar week (Monday start, UTC) a prediction was
+ * made in, used only to count how many separate weeks a sample spans. */
+function weekKey(isoDate: string): string {
+  const d = new Date(isoDate);
+  const day = (d.getUTCDay() + 6) % 7; // Monday = 0
+  const monday = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - day));
+  return monday.toISOString().slice(0, 10);
+}
+
 export function computeAccuracyByHorizon(
   predictions: PredictionRecord[],
   horizons: ForecastHorizonKey[] = ["1_week", "1_month", "3_month", "6_month", "12_month"]
 ): HorizonAccuracy[] {
   return horizons.map((horizon) => {
-    const evaluated = evaluatedOnly(predictions).filter((p) => p.horizon === horizon);
-    const correct = evaluated.filter((p) => p.directionCorrect === true).length;
-    const n = evaluated.length;
+    const scored = scoredCalls(predictions.filter((p) => p.horizon === horizon));
+    const n = scored.length;
+    const correct = scored.filter((s) => s.correct).length;
 
     const directionAccuracyPct = n >= MIN_SAMPLE_PER_HORIZON ? (correct / n) * 100 : null;
 
-    // The naive baseline: how often the market actually moved up across
-    // these same resolved predictions. Guessing that direction every
-    // single time, with no analysis at all, would have scored whichever
-    // of that rate or its complement is higher -- so that is the bar the
-    // pipeline has to clear, not 50%.
-    const withReturns = evaluated.filter((p) => p.actualReturnPct !== null && p.actualReturnPct !== 0);
-    const upCount = withReturns.filter((p) => (p.actualReturnPct as number) > 0).length;
-    const upRate = withReturns.length === 0 ? null : upCount / withReturns.length;
+    // The naive baseline, over EXACTLY the same predictions and scored by
+    // the same up-or-down rule: how well "always guess whichever way the
+    // market actually went" would have done. That, not 50%, is the bar.
+    const upCount = scored.filter((s) => (s.p.actualReturnPct as number) > 0).length;
+    const upRate = n === 0 ? null : upCount / n;
     const baselineRate = upRate === null ? null : Math.max(upRate, 1 - upRate);
-
     const baselineAccuracyPct =
       baselineRate === null || n < MIN_SAMPLE_PER_HORIZON ? null : baselineRate * 100;
 
@@ -150,11 +185,23 @@ export function computeAccuracyByHorizon(
     const standardErrorPct =
       n < MIN_SAMPLE_PER_HORIZON ? null : Math.sqrt((accuracyRate * (1 - accuracyRate)) / n) * 100;
 
+    const distinctWeeks = new Set(scored.map((s) => weekKey(s.p.predictionDate))).size;
+
     const isEdgeMeaningful =
       n >= MIN_SAMPLE_FOR_EDGE_VERDICT &&
+      distinctWeeks >= MIN_WEEKS_FOR_EDGE_VERDICT &&
       edgePct !== null &&
       standardErrorPct !== null &&
       Math.abs(edgePct) > 2 * standardErrorPct;
+
+    // Flat calls are graded separately: did a predicted small move
+    // actually stay small? Drawn from all evaluated predictions for the
+    // horizon, since a flat call is gradeable even when the direction
+    // call wasn't (e.g. the stock finished exactly unchanged).
+    const flatCalls = evaluatedOnly(predictions).filter(
+      (p) => p.horizon === horizon && p.actualReturnPct !== null && isFlatCall(p.expectedReturnPct)
+    );
+    const flatStayed = flatCalls.filter((p) => stayedFlat(p.actualReturnPct as number)).length;
 
     return {
       horizon,
@@ -164,7 +211,11 @@ export function computeAccuracyByHorizon(
       baselineAccuracyPct,
       edgePct,
       standardErrorPct,
+      distinctWeeks,
       isEdgeMeaningful,
+      flatCallCount: flatCalls.length,
+      flatCallStayedFlatPct:
+        flatCalls.length >= MIN_SAMPLE_PER_HORIZON ? (flatStayed / flatCalls.length) * 100 : null,
     };
   });
 }
@@ -195,19 +246,32 @@ export function computeRatingPerformance(predictions: PredictionRecord[]): Ratin
 }
 
 export function computeConfidenceCalibration(predictions: PredictionRecord[]): ConfidenceCalibration {
-  const evaluated = evaluatedOnly(predictions);
+  const scored = scoredCalls(predictions);
 
-  if (evaluated.length < MIN_SAMPLE_FOR_CALIBRATION) {
+  if (scored.length < MIN_SAMPLE_FOR_CALIBRATION) {
     return {
       verdict: "insufficient_data",
       averageStatedConfidence: null,
       actualAccuracyPct: null,
-      explanation: `Not enough evaluated predictions yet (${evaluated.length} of ${MIN_SAMPLE_FOR_CALIBRATION} needed) to judge whether the AI's confidence is well calibrated.`,
+      explanation: `Not enough evaluated predictions yet (${scored.length} of ${MIN_SAMPLE_FOR_CALIBRATION} needed) to judge whether the AI's confidence is well calibrated.`,
     };
   }
 
-  const avgConfidence = average(evaluated.map((p) => p.confidenceScore))!;
-  const accuracyPct = (evaluated.filter((p) => p.directionCorrect === true).length / evaluated.length) * 100;
+  const distinctWeeks = new Set(scored.map((s) => weekKey(s.p.predictionDate))).size;
+  if (distinctWeeks < MIN_WEEKS_FOR_EDGE_VERDICT) {
+    // Same reasoning as the edge verdict: one week's market move can make
+    // any forecaster look over- or under-confident for reasons that have
+    // nothing to do with how its confidence is calibrated.
+    return {
+      verdict: "insufficient_data",
+      averageStatedConfidence: null,
+      actualAccuracyPct: null,
+      explanation: `These predictions come from ${distinctWeeks} week${distinctWeeks === 1 ? "" : "s"} so far; at least ${MIN_WEEKS_FOR_EDGE_VERDICT} separate weeks are needed so a single market move can't decide whether the AI is over- or under-confident.`,
+    };
+  }
+
+  const avgConfidence = average(scored.map((s) => s.p.confidenceScore))!;
+  const accuracyPct = (scored.filter((s) => s.correct).length / scored.length) * 100;
   const gap = avgConfidence - accuracyPct;
 
   let verdict: ConfidenceCalibration["verdict"];
@@ -227,8 +291,13 @@ export function computeConfidenceCalibration(predictions: PredictionRecord[]): C
 }
 
 export function computeSimulatedPerformance(predictions: PredictionRecord[]): SimulatedPerformance {
-  const evaluated = evaluatedOnly(predictions);
-  const returns = evaluated.map((p) => p.actualReturnPct!);
+  // Follow each call: long if the AI predicted up, short if it predicted
+  // down. The return is signed in the call's favour, so a correct bearish
+  // call is a gain. Only predictions that make a gradeable call are
+  // included -- the same set the accuracy figures use.
+  const returns = scoredCalls(predictions).map(({ p }) =>
+    p.expectedReturnPct > 0 ? (p.actualReturnPct as number) : -(p.actualReturnPct as number)
+  );
 
   if (returns.length === 0) {
     return {
@@ -244,9 +313,10 @@ export function computeSimulatedPerformance(predictions: PredictionRecord[]): Si
     };
   }
 
-  // Cumulative return: compounding each prediction's return as if taken
-  // in sequence -- a simplification (real trades would overlap in time),
-  // clearly labeled as simulated, not a claim of actual trading results.
+  // Cumulative return: compounding each call's return as if taken in
+  // sequence -- a simplification (real trades would overlap in time, and
+  // short-selling has costs and risks this ignores), clearly labeled as
+  // simulated, not a claim of actual trading results.
   const cumulativeMultiplier = returns.reduce((acc, r) => acc * (1 + r / 100), 1);
   const cumulativeReturnPct = (cumulativeMultiplier - 1) * 100;
 
@@ -275,11 +345,12 @@ export function computeSimulatedPerformance(predictions: PredictionRecord[]): Si
 
 export function buildAccuracyDashboard(predictions: PredictionRecord[]): AccuracyDashboard {
   const evaluated = evaluatedOnly(predictions);
-  const correctCount = evaluated.filter((p) => p.directionCorrect === true).length;
-  const incorrectCount = evaluated.length - correctCount;
+  const scored = scoredCalls(predictions);
+  const correctCount = scored.filter((s) => s.correct).length;
+  const incorrectCount = scored.length - correctCount;
 
   const overallAccuracyPct =
-    evaluated.length >= MIN_SAMPLE_FOR_OVERALL_ACCURACY ? (correctCount / evaluated.length) * 100 : null;
+    scored.length >= MIN_SAMPLE_FOR_OVERALL_ACCURACY ? (correctCount / scored.length) * 100 : null;
 
   return {
     generatedAt: new Date().toISOString(),
@@ -290,7 +361,7 @@ export function buildAccuracyDashboard(predictions: PredictionRecord[]): Accurac
     overallDirectionAccuracyPct: overallAccuracyPct,
     insufficientSampleMessage:
       overallAccuracyPct === null
-        ? `Not enough historical predictions yet (${evaluated.length} of ${MIN_SAMPLE_FOR_OVERALL_ACCURACY} needed to show an accuracy percentage).`
+        ? `Not enough historical predictions yet (${scored.length} of ${MIN_SAMPLE_FOR_OVERALL_ACCURACY} needed to show an accuracy percentage).`
         : null,
 
     correctCount,
