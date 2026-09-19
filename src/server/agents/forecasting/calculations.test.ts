@@ -106,9 +106,29 @@ describe("computeExpectedReturnPct", () => {
 });
 
 describe("roundPriceForDisplay", () => {
-  it("rounds sub-$20 prices to the nearest 50 cents", () => {
-    expect(roundPriceForDisplay(14.73)).toBeCloseTo(14.5, 5);
-    expect(roundPriceForDisplay(14.9)).toBeCloseTo(15, 5);
+  it("rounds prices under $2 to the nearest cent", () => {
+    expect(roundPriceForDisplay(1.237)).toBeCloseTo(1.24, 5);
+    expect(roundPriceForDisplay(0.514)).toBeCloseTo(0.51, 5);
+  });
+
+  it("rounds $2-$20 prices to the nearest 5 cents", () => {
+    expect(roundPriceForDisplay(14.73)).toBeCloseTo(14.75, 5);
+    expect(roundPriceForDisplay(2.83)).toBeCloseTo(2.85, 5);
+  });
+
+  it("rounds $20-$100 prices to the nearest 50 cents", () => {
+    expect(roundPriceForDisplay(47.4)).toBeCloseTo(47.5, 5);
+  });
+
+  it("keeps worst-case rounding error near half a percent at every magnitude", () => {
+    // The property that actually matters: a flat increment that is fine
+    // for a $150 stock can be catastrophic for a $2.83 one, which is the
+    // bug this replaced. Guard the proportion, not the specific tiers.
+    for (const price of [0.75, 2.83, 9.4, 14.73, 47.4, 150, 480, 2400]) {
+      const rounded = roundPriceForDisplay(price);
+      const errorPct = (Math.abs(rounded - price) / price) * 100;
+      expect(errorPct).toBeLessThan(1);
+    }
   });
 
   it("rounds $20-$200 prices to the nearest whole dollar, avoiding false precision like $183.47", () => {

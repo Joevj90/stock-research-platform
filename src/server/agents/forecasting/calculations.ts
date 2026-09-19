@@ -84,15 +84,29 @@ export function computeExpectedReturnPct(expectedPrice: number, currentPrice: nu
 }
 
 /**
- * "No False Precision" -- rounds a price to a sensible number of
- * significant digits given typical stock-price magnitudes, so the app
- * never displays something like "$183.47" when the underlying
- * uncertainty is large. Enforced structurally here rather than trusted
- * to the AI's own rounding.
+ * "No False Precision" -- rounds a price so the app never implies more
+ * accuracy than a forecast can support (no "$183.47" when the real
+ * uncertainty is tens of dollars). Enforced structurally here rather
+ * than trusted to the AI's own rounding.
+ *
+ * The increments are chosen so the WORST-CASE rounding error stays near
+ * half a percent of the price at every magnitude. That proportionality
+ * is the point: an earlier version used a flat $0.50 increment for
+ * everything under $20, which is 0.3% on a $150 stock but up to 8.8% on
+ * a $2.83 one -- a forecast of $2.83 was stored as $3.00, so the
+ * rounding alone could dwarf the forecast's real error. Because these
+ * rounded figures are what get written into prediction records, that
+ * also quietly corrupted accuracy measurement for low-priced stocks,
+ * not just their display.
+ *
+ * Any new tier added here should keep the same test: half the increment
+ * divided by the price should stay around 0.5% or below.
  */
 export function roundPriceForDisplay(price: number): number {
   if (price <= 0) return 0;
-  if (price < 20) return Math.round(price * 2) / 2; // nearest $0.50
+  if (price < 2) return Math.round(price * 100) / 100; // nearest $0.01
+  if (price < 20) return Math.round(price * 20) / 20; // nearest $0.05
+  if (price < 100) return Math.round(price * 2) / 2; // nearest $0.50
   if (price < 200) return Math.round(price); // nearest $1
   if (price < 1000) return Math.round(price / 5) * 5; // nearest $5
   return Math.round(price / 10) * 10; // nearest $10
