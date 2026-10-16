@@ -14,8 +14,13 @@ vi.mock("@/server/market-data", () => ({
 
 const { prisma } = await import("@/server/db/client");
 const { getQuote } = await import("@/server/market-data");
-const { recordPredictionsFromForecast, evaluatePendingPredictions, getPredictionHistory, getAccuracyDashboard } =
-  await import("./service");
+const {
+  recordPredictionsFromForecast,
+  evaluatePendingPredictions,
+  getPredictionHistory,
+  getAccuracyDashboard,
+  exportAllPredictions,
+} = await import("./service");
 
 const STOCK_ROW = { id: "stock_1", ticker: "AAPL" };
 
@@ -234,5 +239,30 @@ describe("getAccuracyDashboard", () => {
 
     expect(result.totalPredictions).toBe(0);
     expect(result.overallDirectionAccuracyPct).toBeNull();
+  });
+});
+
+describe("exportAllPredictions", () => {
+  it("returns every prediction across all tickers, oldest first", async () => {
+    (prisma.prediction.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+
+    const result = await exportAllPredictions();
+
+    // Ordered by prediction date so the export reads chronologically,
+    // and not filtered to a single ticker.
+    const call = (prisma.prediction.findMany as ReturnType<typeof vi.fn>).mock.calls.at(-1)![0];
+    expect(call).toEqual({ orderBy: { predictionDate: "asc" } });
+    expect(result.totalPredictions).toBe(0);
+    expect(result.predictions).toEqual([]);
+  });
+
+  it("evaluates anything newly due before exporting, so the file isn't stale", async () => {
+    (prisma.prediction.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+
+    await exportAllPredictions();
+
+    // evaluatePendingPredictions runs its own findMany for due rows, so
+    // more than one query means the evaluation pass happened first.
+    expect((prisma.prediction.findMany as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(1);
   });
 });

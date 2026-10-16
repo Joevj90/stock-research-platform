@@ -3,6 +3,7 @@ export {
   evaluatePendingPredictions,
   getPredictionHistory,
   getAccuracyDashboard,
+  exportAllPredictions,
 } from "./service";
 export type {
   PredictionRecord,

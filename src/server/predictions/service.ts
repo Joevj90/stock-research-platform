@@ -162,6 +162,30 @@ export async function getPredictionHistory(rawTicker: string): Promise<Result<Pr
   return { ok: true, data: { ticker, predictions: rows.map(rowToRecord) } };
 }
 
+/**
+ * Every prediction ever recorded, across every ticker, oldest first --
+ * the whole tracking table in one read.
+ *
+ * Exists because the UI can only show one ticker at a time and nothing
+ * lists which tickers have been researched, so there was no way to get
+ * the full history out for analysis. Read-only: it evaluates anything
+ * now due first (same as the other read paths), then returns rows
+ * exactly as stored. Makes no AI call and changes no prediction.
+ */
+export async function exportAllPredictions(): Promise<{
+  generatedAt: string;
+  totalPredictions: number;
+  predictions: PredictionRecord[];
+}> {
+  await evaluatePendingPredictions();
+  const rows = await prisma.prediction.findMany({ orderBy: { predictionDate: "asc" } });
+  return {
+    generatedAt: new Date().toISOString(),
+    totalPredictions: rows.length,
+    predictions: rows.map(rowToRecord),
+  };
+}
+
 export async function getAccuracyDashboard(): Promise<AccuracyDashboard> {
   await evaluatePendingPredictions();
   const rows = await prisma.prediction.findMany();
