@@ -118,7 +118,13 @@ describe("gatherAnalysisSummaries", () => {
 
   it("does not let a News Intelligence failure prevent the other 6 independent agents from contributing", async () => {
     (runNewsIntelligence as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
-    (runTechnicalAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true, data: { interpretation: {} } });
+    (runTechnicalAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      // Mirrors the real shape: the technical agent always returns a
+      // `calculated` block alongside its interpretation, and the shared
+      // summary now reads the volatility figures out of it.
+      data: { interpretation: {}, calculated: { atr14: 2.5, volatilityAnnualizedPct: 31.75, currentPrice: 100, momentum: { rateOfChange10Pct: 1.2 }, supportLevels: [95], resistanceLevels: [110] } },
+    });
 
     const result = await gatherAnalysisSummaries("AAPL");
 

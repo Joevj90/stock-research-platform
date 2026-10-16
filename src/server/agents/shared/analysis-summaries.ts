@@ -51,7 +51,27 @@ export interface AnalysisInputsAvailability {
 
 export interface AnalysisSummaries {
   valuationDcfEstimates: { bearFairValue: number | null; baseFairValue: number | null; bullFairValue: number | null } | null;
-  technicalSummary: { trend: string; momentum: string; technicalScore: number; explanation: string } | null;
+  /** Includes the real volatility figures, not just the qualitative
+   * labels. The Forecasting Agent is asked to produce price ranges, and
+   * until these were added it had no idea how far the stock normally
+   * moves -- measured 1-week forecasts put the typical move at ~1% for
+   * stocks really moving ~6.5%, and 66% of outcomes fell outside the
+   * predicted bear-to-bull range. Numbers it can anchor on, rather than
+   * the word "volatile", are the fix. */
+  technicalSummary: {
+    trend: string;
+    momentum: string;
+    technicalScore: number;
+    explanation: string;
+    /** ATR(14) as a percent of current price -- typical daily range. */
+    atrPct: number | null;
+    /** Annualized volatility percent, as computed by the technical module. */
+    volatilityAnnualizedPct: number | null;
+    /** 10-bar rate of change, percent. */
+    rateOfChange10Pct: number | null;
+    nearestSupport: number | null;
+    nearestResistance: number | null;
+  } | null;
   fundamentalSummary: { overallFundamentalScore: number; overallConclusion: string } | null;
   sentimentSummary: { sentimentScore: number; sentimentDirection: string; sentimentTrend: string; overallConclusion: string } | null;
   macroSummary: { macroScore: number; overallMacroEnvironment: string; overallConclusion: string } | null;
@@ -172,6 +192,14 @@ export async function gatherAnalysisSummaries(ticker: string): Promise<GatheredA
               momentum: technical.data.interpretation.momentum,
               technicalScore: technical.data.interpretation.technicalScore,
               explanation: technical.data.interpretation.explanation,
+              atrPct:
+                technical.data.calculated.atr14 !== null && technical.data.calculated.currentPrice > 0
+                  ? (technical.data.calculated.atr14 / technical.data.calculated.currentPrice) * 100
+                  : null,
+              volatilityAnnualizedPct: technical.data.calculated.volatilityAnnualizedPct,
+              rateOfChange10Pct: technical.data.calculated.momentum.rateOfChange10Pct,
+              nearestSupport: technical.data.calculated.supportLevels[0] ?? null,
+              nearestResistance: technical.data.calculated.resistanceLevels[0] ?? null,
             }
           : null,
       fundamentalSummary:

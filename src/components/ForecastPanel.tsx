@@ -20,6 +20,10 @@ const HORIZON_LABEL: Record<ForecastHorizonKey, string> = {
 
 const HORIZON_ORDER: ForecastHorizonKey[] = ["1_week", "1_month", "3_month", "6_month", "12_month"];
 
+/** Horizons where the measured direction accuracy does not justify
+ * presenting the call as a signal. See the note rendered below. */
+const SHORT_HORIZONS = new Set<ForecastHorizonKey>(["1_week"]);
+
 const INPUT_LABELS: { key: keyof ForecastResult["inputsUsed"]; label: string }[] = [
   { key: "technical", label: "Technical" },
   { key: "fundamental", label: "Fundamental" },
@@ -133,6 +137,24 @@ function ResultView({
       {!horizon.dataSupportsThisHorizon && (
         <div className="rounded-lg border border-yellow-700/40 bg-yellow-900/10 p-3 text-xs text-yellow-300">
           {horizon.limitationNote ?? "Not enough data to support a reliable forecast for this time frame."}
+        </div>
+      )}
+
+      {SHORT_HORIZONS.has(activeHorizon) && (
+        /* Not a generic disclaimer -- this is what this app's own
+         * tracked predictions measured. Over 64 resolved 1-week
+         * forecasts the direction was right 43.8% of the time, against
+         * 70.3% for a no-analysis baseline over the same stocks and
+         * weeks. Showing an up/down call that the record says is worse
+         * than useless, without saying so on the same screen, would be
+         * the dishonest option. The range below is still informative;
+         * the arrow is not. */
+        <div className="rounded-lg border border-yellow-700/40 bg-yellow-900/10 p-3 text-xs text-yellow-300">
+          <span className="font-semibold">Don&apos;t trade on the direction of this one.</span> Tracked against real
+          outcomes, this app&apos;s 1-week up/down calls have been right 44% of the time &mdash; worse than a coin
+          flip, and worse than simply assuming nothing. Over a week a share price is mostly noise. Use the range
+          below as a sense of how far this stock can move, not the arrow as a prediction. The 3, 6 and 12-month
+          views are where the analysis has something to say.
         </div>
       )}
 

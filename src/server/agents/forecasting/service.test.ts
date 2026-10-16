@@ -152,7 +152,10 @@ describe("runForecast", () => {
   it("records inputsUsed correctly when some sub-agents succeed and some fail", async () => {
     (runTechnicalAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,
-      data: { interpretation: { trend: "uptrend", momentum: "bullish", technicalScore: 30, explanation: "x" } },
+      data: {
+        interpretation: { trend: "uptrend", momentum: "bullish", technicalScore: 30, explanation: "x" },
+        calculated: { atr14: 2.5, volatilityAnnualizedPct: 31.75, currentPrice: 100, momentum: { rateOfChange10Pct: 1.2 }, supportLevels: [95], resistanceLevels: [110] },
+      },
     });
     (runFundamentalAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
     (runValuationAnalysis as ReturnType<typeof vi.fn>).mockResolvedValue(FAILURE);
@@ -262,7 +265,12 @@ describe("runForecast", () => {
       },
       summaries: {
         valuationDcfEstimates: null,
-        technicalSummary: { trend: "uptrend", momentum: "bullish", technicalScore: 20, explanation: "x" },
+        technicalSummary: { trend: "uptrend", momentum: "bullish", technicalScore: 20, explanation: "x",
+    atrPct: 2.5,
+    volatilityAnnualizedPct: 31.75,
+    rateOfChange10Pct: 1.2,
+    nearestSupport: 95,
+    nearestResistance: 110, },
         fundamentalSummary: null,
         sentimentSummary: null,
         macroSummary: null,

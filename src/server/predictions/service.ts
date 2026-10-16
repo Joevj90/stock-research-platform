@@ -18,7 +18,23 @@ import {
 
 const log = logger.child("predictions:service");
 
-const PREDICTION_VERSION = "v1";
+/**
+ * Stamped on every prediction row so a change to the forecasting prompt
+ * or logic can be measured instead of assumed. Bump this whenever a
+ * change could plausibly move accuracy, then compare v(n) against
+ * v(n-1) in the export once enough rows have accumulated.
+ *
+ * v1 -- original five-horizon forecaster.
+ * v2 -- the forecaster is given the stock's real volatility (ATR and
+ *       realized volatility, previously stripped out of the shared
+ *       analysis summary), the prompt instruction to keep short-horizon
+ *       ranges narrow was removed, and a volatility-derived minimum
+ *       bear-to-bull width is enforced in code. Success criterion: the
+ *       share of outcomes landing outside the stated range falls from
+ *       the 66% measured on v1's 1-week forecasts toward 25-35%.
+ *       Direction accuracy is NOT expected to improve.
+ */
+const PREDICTION_VERSION = "v2";
 /** Don't record a near-duplicate prediction for the same ticker+horizon
  * within this window -- prevents the table from filling with redundant
  * rows every time a user re-runs the Forecasting Agent in quick

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { env } from "@/server/config/env";
 import { logger } from "@/server/logger";
 import type { Result } from "@/lib/types";
+import type { ForecastHorizonKey } from "@/lib/forecast-types";
 import type { AnalysisSummaries } from "@/server/agents/shared/analysis-summaries";
 import { parseAiJsonResponse, AiJsonParseError } from "@/server/agents/shared/parse-ai-json";
 import { callAnthropicForText } from "@/server/agents/shared/call-anthropic";
@@ -20,10 +21,11 @@ CRITICAL RULES:
 2. For EACH horizon, provide a priceTarget and probabilityPct for bear, base, and bull. You do NOT need to make bear+base+bull probabilities sum to exactly 100 -- the application will normalize them deterministically. Just give your best relative judgment (e.g. base case is much more likely than bear/bull).
 3. Do NOT perform the expected-price or expected-return math yourself -- the application calculates those deterministically from your price targets and probabilities. Just provide the scenario prices and probabilities.
 4. Use the real DCF bear/base/bull fair values given to you as a strong anchor for your price targets on the 3/6/12-month horizons, adjusted by the other real evidence (technical trend, sentiment, macro conditions, competitive position, management execution, and risk level) you were given.
-5. The 1-week and 1-month horizons are DIFFERENT IN KIND from the 3/6/12-month horizons, not just shorter versions of them. Over a week or a month, short-term price action is dominated by trading noise, momentum, and near-term catalysts (e.g. an upcoming earnings date or product event already in the news summaries), not by the stock converging toward DCF fair value -- fundamental mispricing identified by a DCF model can easily persist or even widen over a single week or month even when the 12-month thesis is correct. For these two horizons: weight the technical/momentum summary and any near-term catalysts from the news summaries much more heavily than the DCF fair-value estimates, keep the bear/base/bull price range meaningfully narrower than the 3-month range (large short-term swings are the exception, not the norm), and be readier to set dataSupportsThisHorizon to false when there's no technical or near-term catalyst data available to anchor a short-term call -- do not simply interpolate a fraction of the 12-month move.
-6. confidenceScore (0-100) does NOT mean "how sure are we of the exact price" -- it reflects how RELIABLE the overall forecast is, based on: how much real data was available, how much the different analyses agree with each other, business stability, and valuation/macro/company-specific uncertainty. Disagreement between analyses or missing data should lower this score -- but when the data is comprehensive and the analyses genuinely agree, say so with a real high score (80s-90s is fine when earned); don't reflexively cap it out of general caution when the evidence doesn't call for that.
-7. Write every explanation in plain, everyday language a person with no investing background can understand. Whenever you'd use a term like "multiple expansion" or "revenue deceleration", explain what it means in the same or next sentence, in the plain style already used elsewhere in this app.
-8. keyRisksSummary must be a SHORT summary of what matters most for this forecast, not a duplicate of a full risk analysis.
+5. The 1-week and 1-month horizons are DIFFERENT IN KIND from the 3/6/12-month horizons, not just shorter versions of them. Over a week or a month, short-term price action is dominated by trading noise, momentum, and near-term catalysts (e.g. an upcoming earnings date or product event already in the news summaries), not by the stock converging toward DCF fair value -- fundamental mispricing identified by a DCF model can easily persist or even widen over a single week or month even when the 12-month thesis is correct. For these two horizons: weight the technical/momentum summary and any near-term catalysts from the news summaries much more heavily than the DCF fair-value estimates, be readier to set dataSupportsThisHorizon to false when there's no technical or near-term catalyst data available to anchor a short-term call, and do not simply interpolate a fraction of the 12-month move. Be genuinely willing to say the base case is roughly flat over a week -- that is often the truthful answer and it is a better answer than a confident small move invented to look useful.
+6. SIZE THE BEAR-TO-BULL RANGE FROM THE STOCK'S REAL VOLATILITY, which you are given as typicalMoveByHorizonPct -- the size of an ORDINARY move for this specific stock over each horizon, measured from its actual trading history. Roughly one move in three is bigger than that figure, so the bear and bull targets must sit WELL OUTSIDE it: a usable range is about two and a half times the typical move from end to end, i.e. bear and bull each roughly 1.25x the typical move away from your base case. A worked example: if typicalMoveByHorizonPct for 1_week is 4.0 on a $100 stock and your base case is $100, then bear near $95 and bull near $105 -- NOT $99 to $101. This applies to every horizon. Two specific errors to avoid, both measured in this application's own prediction records: (a) short-horizon ranges came out far too narrow, and two thirds of actual 1-week outcomes finished outside the stated range, which makes the range worthless; (b) the range does not shrink in proportion to time -- uncertainty grows with the square root of time, so a 1-week range should be roughly a third of a 3-month range, not a twelfth of it. The typicalMoveByHorizonPct figures already account for this; use them. If typicalMoveByHorizonPct is null, no volatility measurement was available -- say so in limitationNote rather than guessing a narrow range.
+7. confidenceScore (0-100) does NOT mean "how sure are we of the exact price" -- it reflects how RELIABLE the overall forecast is, based on: how much real data was available, how much the different analyses agree with each other, business stability, and valuation/macro/company-specific uncertainty. Disagreement between analyses or missing data should lower this score -- but when the data is comprehensive and the analyses genuinely agree, say so with a real high score (80s-90s is fine when earned); don't reflexively cap it out of general caution when the evidence doesn't call for that.
+8. Write every explanation in plain, everyday language a person with no investing background can understand. Whenever you'd use a term like "multiple expansion" or "revenue deceleration", explain what it means in the same or next sentence, in the plain style already used elsewhere in this app.
+9. keyRisksSummary must be a SHORT summary of what matters most for this forecast, not a duplicate of a full risk analysis.
 
 CRITICAL JSON FORMATTING RULE: never place a double-quote character (") inside any string value, including to quote a term or phrase for emphasis (e.g. do NOT write "the \"base case\" scenario" -- write "the base case scenario" instead, with no quotation marks around it at all). A single unescaped internal quote breaks the entire response. If you want to emphasize or name a specific term, write it plainly without surrounding punctuation marks that could be mistaken for a string delimiter.
 
@@ -47,7 +49,7 @@ Respond with ONLY a single JSON object, no markdown code fences, no prose before
   "keyCatalysts": [ up to 4 items: { "whatCouldHappen": string, "whyItWouldHelp": string, "importance": "low"|"medium"|"high" } ],
   "keyRisksSummary": [ up to 4 short plain-language strings ],
   "confidenceScore": integer 0-100,
-  "confidenceExplanation": "plain-language explanation of the confidence score, per rule 6",
+  "confidenceExplanation": "plain-language explanation of the confidence score, per rule 7",
   "biggestOptimismReason": "plain-language, the single biggest reason for optimism",
   "biggestRiskReason": "plain-language, the single biggest risk",
   "assumptions": [ up to 5 items: { "assumption": "short label", "explanation": "plain-language explanation of what this assumption means" } ],
@@ -110,6 +112,19 @@ export interface ForecastInterpreterInput extends AnalysisSummaries {
   ticker: string;
   companyName: string | null;
   currentPrice: number;
+  /** Size of an ordinary move for THIS stock over each horizon, in
+   * percent, derived in code from the technical module's realized
+   * volatility (see ./volatility.ts). Null when the technical module
+   * produced no volatility measurement -- the prompt tells the model to
+   * flag that in limitationNote rather than guess.
+   *
+   * This exists because the model was previously asked for a price
+   * range with no information about how far the stock actually travels,
+   * and unsurprisingly produced ranges that two thirds of real outcomes
+   * escaped. A code-side floor is applied afterwards regardless (see
+   * service.ts), but giving the model the figure produces a better
+   * reasoned range than clamping a bad one. */
+  typicalMoveByHorizonPct: Record<ForecastHorizonKey, number> | null;
 }
 
 /**

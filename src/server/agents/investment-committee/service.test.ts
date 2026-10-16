@@ -36,7 +36,12 @@ function gathered(currentPrice: number | null = 200): GatheredAnalysisInputs {
     },
     summaries: {
       valuationDcfEstimates: { bearFairValue: 150, baseFairValue: 210, bullFairValue: 280 },
-      technicalSummary: { trend: "uptrend", momentum: "bullish", technicalScore: 40, explanation: "x" },
+      technicalSummary: { trend: "uptrend", momentum: "bullish", technicalScore: 40, explanation: "x",
+    atrPct: 2.5,
+    volatilityAnnualizedPct: 31.75,
+    rateOfChange10Pct: 1.2,
+    nearestSupport: 95,
+    nearestResistance: 110, },
       fundamentalSummary: { overallFundamentalScore: 50, overallConclusion: "x" },
       sentimentSummary: null,
       macroSummary: null,

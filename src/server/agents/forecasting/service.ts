@@ -15,6 +15,7 @@ import {
   roundPriceForDisplay,
   roundReturnPct,
 } from "./calculations";
+import { typicalMoveByHorizonPct, widenRangeToVolatility, type VolatilityInputs } from "./volatility";
 
 const log = logger.child("agents:forecasting");
 
@@ -65,10 +66,20 @@ export async function runForecast(
 
   const { currentPrice, companyName, inputsUsed, summaries } = gathered;
 
+  // The stock's own measured volatility, used in two places: handed to
+  // the model so its ranges have a sense of scale, and applied in code
+  // afterwards as a floor (see ./volatility.ts for the measurements that
+  // forced this).
+  const volatility: VolatilityInputs = {
+    volatilityAnnualizedPct: summaries.technicalSummary?.volatilityAnnualizedPct ?? null,
+    atrPct: summaries.technicalSummary?.atrPct ?? null,
+  };
+
   const interpreterInput: ForecastInterpreterInput = {
     ticker,
     companyName,
     currentPrice,
+    typicalMoveByHorizonPct: typicalMoveByHorizonPct(volatility),
     ...summaries,
   };
 
@@ -78,7 +89,7 @@ export async function runForecast(
     return interpretationResult;
   }
 
-  const interpretation = finalizeInterpretation(interpretationResult.data, currentPrice);
+  const interpretation = finalizeInterpretation(interpretationResult.data, currentPrice, volatility);
 
   return {
     ok: true,
@@ -100,13 +111,29 @@ export async function runForecast(
  * in backend code rather than relying on the LLM." This is the ONLY place
  * those numbers are computed.
  */
-function finalizeInterpretation(raw: RawForecastInterpretation, currentPrice: number): ForecastInterpretation {
+function finalizeInterpretation(
+  raw: RawForecastInterpretation,
+  currentPrice: number,
+  volatility: VolatilityInputs
+): ForecastInterpretation {
   const horizons: HorizonForecast[] = raw.horizons.map((h) => {
     const normalizedProbs = normalizeProbabilities(h.bear.probabilityPct, h.base.probabilityPct, h.bull.probabilityPct);
 
-    const bearPrice = roundPriceForDisplay(h.bear.priceTarget);
-    const basePrice = roundPriceForDisplay(h.base.priceTarget);
-    const bullPrice = roundPriceForDisplay(h.bull.priceTarget);
+    // Enforce the volatility floor on the raw targets, BEFORE rounding
+    // and before any return is computed, so every downstream number --
+    // scenario returns, expected price, the stored prediction record --
+    // describes the same range the reader is shown. The base case is
+    // never moved; only the tails.
+    const widened = widenRangeToVolatility({
+      scenarios: { bear: h.bear.priceTarget, base: h.base.priceTarget, bull: h.bull.priceTarget },
+      currentPrice,
+      horizon: h.horizon,
+      volatility,
+    });
+
+    const bearPrice = roundPriceForDisplay(widened.bear);
+    const basePrice = roundPriceForDisplay(widened.base);
+    const bullPrice = roundPriceForDisplay(widened.bull);
 
     // Scenario returns use the AI's unrounded targets for the same reason
     // the expected return does (see below); the rounded prices are what
@@ -116,7 +143,7 @@ function finalizeInterpretation(raw: RawForecastInterpretation, currentPrice: nu
       explanation: h.bear.explanation,
       estimatedFinancialOutcome: h.bear.estimatedFinancialOutcome,
       priceTarget: bearPrice,
-      expectedReturnPct: roundReturnPct(computeExpectedReturnPct(h.bear.priceTarget, currentPrice)),
+      expectedReturnPct: roundReturnPct(computeExpectedReturnPct(widened.bear, currentPrice)),
       probabilityPct: normalizedProbs.bear,
       mainReasons: h.bear.mainReasons,
       keyRisks: h.bear.keyRisks,
@@ -126,7 +153,7 @@ function finalizeInterpretation(raw: RawForecastInterpretation, currentPrice: nu
       explanation: h.base.explanation,
       estimatedFinancialOutcome: h.base.estimatedFinancialOutcome,
       priceTarget: basePrice,
-      expectedReturnPct: roundReturnPct(computeExpectedReturnPct(h.base.priceTarget, currentPrice)),
+      expectedReturnPct: roundReturnPct(computeExpectedReturnPct(widened.base, currentPrice)),
       probabilityPct: normalizedProbs.base,
       mainReasons: h.base.mainReasons,
       keyRisks: h.base.keyRisks,
@@ -136,16 +163,19 @@ function finalizeInterpretation(raw: RawForecastInterpretation, currentPrice: nu
       explanation: h.bull.explanation,
       estimatedFinancialOutcome: h.bull.estimatedFinancialOutcome,
       priceTarget: bullPrice,
-      expectedReturnPct: roundReturnPct(computeExpectedReturnPct(h.bull.priceTarget, currentPrice)),
+      expectedReturnPct: roundReturnPct(computeExpectedReturnPct(widened.bull, currentPrice)),
       probabilityPct: normalizedProbs.bull,
       mainReasons: h.bull.mainReasons,
       keyRisks: h.bull.keyRisks,
     };
 
+    // Weighted from the UNROUNDED targets, for the same reason the
+    // returns are: rounding each of three inputs and then averaging
+    // them bakes three rounding errors into the headline figure.
     const expectedPriceRaw = computeExpectedPrice({
-      bear: { priceTarget: bear.priceTarget, probabilityPct: bear.probabilityPct },
-      base: { priceTarget: base.priceTarget, probabilityPct: base.probabilityPct },
-      bull: { priceTarget: bull.priceTarget, probabilityPct: bull.probabilityPct },
+      bear: { priceTarget: widened.bear, probabilityPct: bear.probabilityPct },
+      base: { priceTarget: widened.base, probabilityPct: base.probabilityPct },
+      bull: { priceTarget: widened.bull, probabilityPct: bull.probabilityPct },
     });
     const expectedPrice = roundPriceForDisplay(expectedPriceRaw);
 
