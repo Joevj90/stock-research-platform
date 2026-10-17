@@ -37,6 +37,7 @@ model Stock {
   insiderTransactions InsiderTransaction[]
   insiderTradingCacheEntries InsiderTradingCacheEntry[]
   predictions Prediction[]
+  watchlistItems WatchlistItem[]
   savedAnalyses SavedAnalysis[]
   analyses     Analysis[]
   forecasts    Forecast[]
@@ -452,4 +453,25 @@ model SavedAnalysis {
 
   @@index([ticker, analysisDate])
   @@map("saved_analyses")
+}
+
+/// A stock the user is tracking by hand, for the Trend Reset strategy.
+///
+/// Deliberately thin: a ticker, when it was added, and a free-text note.
+/// The strategy conditions are NOT stored here -- they are recomputed
+/// from live price bars every time the watchlist is checked, because a
+/// stored pass/fail would go stale the next trading day and there is no
+/// way for a reader to tell a fresh verdict from a week-old one.
+model WatchlistItem {
+  id        String   @id @default(cuid())
+  stockId   String
+  stock     Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+
+  ticker    String   @unique
+  notes     String?
+  addedAt   DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([addedAt])
+  @@map("watchlist_items")
 }
