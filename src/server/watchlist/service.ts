@@ -39,10 +39,57 @@ export const MAX_WATCHLIST_SIZE = 25;
  * history still evaluates instead of reporting "not enough data". */
 const HISTORY_PERIOD = "3Y" as const;
 
-/** How many stocks to check at once. The limit is a courtesy to the
- * data provider rather than a hard requirement; checks are cheap once
- * the 12-hour cache is warm. */
-const CHECK_CONCURRENCY = 4;
+/**
+ * How many stocks to fetch at once, and how hard to retry.
+ *
+ * Measured against the live plan on 2026-10-17: a burst of 10
+ * simultaneous requests came back with two HTTP 402s (PG and HD) while
+ * the other eight succeeded. 402 is normally "your plan does not cover
+ * this", but the plan plainly does cover these symbols -- the same
+ * endpoint serves them fine on their own, and the two that failed were
+ * ordinary large caps sitting between six that worked. So the 402 under
+ * load is spurious, and without a retry roughly one watchlist row in
+ * five would display "requires a paid plan" for a stock that is
+ * perfectly available.
+ *
+ * Hence: fetch two at a time instead of four, and retry once. Both are
+ * cheap -- the 12-hour cache means a warm check makes no requests at
+ * all, and a retry only costs a request when the first attempt failed.
+ */
+const CHECK_CONCURRENCY = 2;
+const FETCH_RETRIES = 1;
+const RETRY_DELAY_MS = 500;
+
+/** Failures worth a second attempt. A genuinely bad ticker returns
+ * INVALID_TICKER and is not retried, so a typo still fails fast. */
+const RETRYABLE_ERROR_CODES = new Set([
+  "PROVIDER_PLAN_REQUIRED", // spurious under concurrency -- see above
+  "PROVIDER_RATE_LIMITED",
+  "PROVIDER_ERROR",
+  "PROVIDER_TIMEOUT",
+  "NETWORK_ERROR",
+]);
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Fetches one stock's history, retrying once on the failures that
+ * experience says are transient. */
+async function fetchHistoryWithRetry(ticker: string) {
+  let last = await getHistoricalPrices(ticker, HISTORY_PERIOD);
+
+  for (let attempt = 0; attempt < FETCH_RETRIES; attempt++) {
+    if (last.ok) return last;
+    if (!RETRYABLE_ERROR_CODES.has(last.error.code)) return last;
+
+    log.warn("retrying watchlist price fetch", { ticker, code: last.error.code });
+    await sleep(RETRY_DELAY_MS);
+    last = await getHistoricalPrices(ticker, HISTORY_PERIOD);
+  }
+
+  return last;
+}
 
 const TICKER_PATTERN = /^[A-Z][A-Z0-9.\-]{0,9}$/;
 
@@ -211,16 +258,23 @@ async function latestForecastFor(ticker: string): Promise<WatchlistCheckRow["lat
 
 async function checkOne(entry: WatchlistEntry): Promise<WatchlistCheckRow> {
   const [history, latestForecast] = await Promise.all([
-    getHistoricalPrices(entry.ticker, HISTORY_PERIOD),
+    fetchHistoryWithRetry(entry.ticker),
     latestForecastFor(entry.ticker),
   ]);
 
   if (!history.ok) {
+    // Say plainly when a failure is the known flaky one, so a spurious
+    // 402 is not read as "upgrade your plan".
+    const message =
+      history.error.code === "PROVIDER_PLAN_REQUIRED"
+        ? `The data provider refused this request twice. This is usually temporary rather than a real plan limit — try the check again in a moment.`
+        : history.error.message;
+
     return {
       ...entry,
       evaluation: evaluateTrendReset([]),
       latestForecast,
-      error: history.error.message,
+      error: message,
     };
   }
 

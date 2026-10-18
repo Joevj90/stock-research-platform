@@ -210,6 +210,54 @@ describe("checkWatchlist", () => {
     expect(result.data.rows[0]!.latestForecast?.expectedReturnPct).toBe(7.2);
   });
 
+  it("retries a spurious plan-limit error and succeeds on the second try", async () => {
+    // Measured behaviour: concurrent requests sometimes return 402 for
+    // symbols the plan plainly covers. Without the retry, those rows
+    // would tell the user to upgrade a plan that is already sufficient.
+    (prisma.watchlistItem.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([row("PG")]);
+    let calls = 0;
+    (getHistoricalPrices as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      calls++;
+      return calls === 1
+        ? { ok: false, error: { code: "PROVIDER_PLAN_REQUIRED", message: "Requires a paid plan." } }
+        : { ok: true, data: qualifyingBars() };
+    });
+
+    const result = await checkWatchlist();
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(calls).toBe(2);
+    expect(result.data.rows[0]!.error).toBeNull();
+    expect(result.data.rows[0]!.evaluation.qualifies).toBe(true);
+  });
+
+  it("does not blame the plan when both attempts fail", async () => {
+    (prisma.watchlistItem.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([row("PG")]);
+    (getHistoricalPrices as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: false,
+      error: { code: "PROVIDER_PLAN_REQUIRED", message: "Requires a paid plan." },
+    });
+
+    const result = await checkWatchlist();
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.rows[0]!.error).toContain("temporary");
+    expect(result.data.rows[0]!.error).not.toContain("Requires a paid plan");
+  });
+
+  it("does not waste a retry on a genuinely bad ticker", async () => {
+    (prisma.watchlistItem.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([row("NOTREAL")]);
+    let calls = 0;
+    (getHistoricalPrices as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      calls++;
+      return { ok: false, error: { code: "INVALID_TICKER", message: "No data found." } };
+    });
+
+    const result = await checkWatchlist();
+    expect(result.ok).toBe(true);
+    expect(calls).toBe(1);
+  });
+
   it("survives a missing forecast table without failing the check", async () => {
     (prisma.watchlistItem.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([row("AAPL")]);
     (getHistoricalPrices as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true, data: qualifyingBars() });

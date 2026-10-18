@@ -248,7 +248,14 @@ export async function GET() {
     })
   );
   const burstMs = Date.now() - burstStart;
-  const throttled = burstResults.filter((s) => s === 429).length;
+  // Count ANY non-200 as a failure. An earlier version counted only
+  // HTTP 429 and so reported "no throttling" on a run where two of ten
+  // requests came back 402 -- a 20% failure rate presented as a clean
+  // pass. Whatever status a refused request carries, it is a request
+  // that did not return data.
+  const failures = burstSymbols
+    .map((symbol, i) => ({ symbol, status: burstResults[i] }))
+    .filter((r) => r.status !== 200);
 
   const summary = {
     checkedAt: new Date().toISOString(),
@@ -260,11 +267,14 @@ export async function GET() {
       symbolsRequested: burstSymbols.length,
       elapsedMs: burstMs,
       statuses: burstResults,
-      throttledCount: throttled,
+      failureCount: failures.length,
+      failures,
       verdict:
-        throttled > 0
-          ? `${throttled} of ${burstSymbols.length} were rate-limited (HTTP 429). Bulk pulls will need throttling.`
-          : `No throttling at 10 concurrent requests (${burstMs}ms total). Documented Starter limit is 300 requests/minute.`,
+        failures.length > 0
+          ? `${failures.length} of ${burstSymbols.length} FAILED under concurrency: ${failures
+              .map((f) => `${f.symbol} (HTTP ${f.status})`)
+              .join(", ")}. If the same symbols fail on a re-run it is symbol-specific; if different ones fail it is a concurrency limit, and bulk reads need lower concurrency plus a retry.`
+          : `All ${burstSymbols.length} concurrent requests succeeded (${burstMs}ms total).`,
     },
   };
 
