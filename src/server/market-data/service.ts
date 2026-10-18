@@ -64,8 +64,10 @@ export async function getQuote(rawTicker: string): Promise<Result<Quote>> {
     });
 
     if (cacheEntry && cacheEntry.provider === marketDataProvider.id && isFresh(cacheEntry.retrievedAt, QUOTE_CACHE_TTL_MS)) {
+      // Same reasoning as the historical read below: never serve a row
+      // that a different provider wrote.
       const cached = await prisma.quote.findFirst({
-        where: { stockId: stock.id },
+        where: { stockId: stock.id, provider: marketDataProvider.id },
         orderBy: { retrievedAt: "desc" },
       });
       if (cached) {
@@ -142,8 +144,30 @@ export async function getHistoricalPrices(
     });
 
     if (cacheEntry && cacheEntry.provider === marketDataProvider.id && isFresh(cacheEntry.retrievedAt, HISTORICAL_CACHE_TTL_MS)) {
+      // The provider filter matters as much as the freshness check above.
+      // The cache ENTRY records which provider last refreshed this range,
+      // but the bars themselves are keyed on stock+timestamp+interval
+      // with no provider in the key, so rows written while the app ran
+      // on the mock provider sit in the same table as real ones.
+      //
+      // Without this filter, a stock that was fetched under mock and
+      // later refreshed under FMP returns a MIXTURE: real bars wherever
+      // the FMP range overwrote the mock ones, and leftover fabricated
+      // bars wherever it did not. A 200-day average computed over that
+      // mixture is wrong and looks completely normal -- no error, no
+      // marker, just a number that is part invention.
+      //
+      // Filtering here means a provider switch yields fewer bars rather
+      // than contaminated ones, and callers that need a minimum history
+      // (the Trend Reset check needs 220 bars) report "not enough data"
+      // instead of quietly averaging fiction.
       const bars = await prisma.priceBar.findMany({
-        where: { stockId: stock.id, interval: "1d", timestamp: { gte: from, lte: to } },
+        where: {
+          stockId: stock.id,
+          interval: "1d",
+          provider: marketDataProvider.id,
+          timestamp: { gte: from, lte: to },
+        },
         orderBy: { timestamp: "asc" },
       });
       if (bars.length > 0) {

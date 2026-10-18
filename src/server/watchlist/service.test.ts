@@ -98,6 +98,26 @@ describe("addToWatchlist", () => {
   });
 });
 
+describe("company names", () => {
+  it("hides mock-era names rather than showing them next to real prices", async () => {
+    (prisma.watchlistItem.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: "w1", ticker: "AAPL", notes: null, addedAt: new Date(), stock: { name: "AAPL (mock — name unknown)" } },
+    ]);
+    const result = await listWatchlist();
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.data[0]!.companyName).toBeNull();
+  });
+
+  it("keeps a real company name", async () => {
+    (prisma.watchlistItem.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: "w1", ticker: "AAPL", notes: null, addedAt: new Date(), stock: { name: "Apple Inc." } },
+    ]);
+    const result = await listWatchlist();
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.data[0]!.companyName).toBe("Apple Inc.");
+  });
+});
+
 describe("removeFromWatchlist", () => {
   it("reports a clear error when the row isn't there", async () => {
     (prisma.watchlistItem.delete as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("not found"));

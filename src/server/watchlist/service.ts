@@ -133,6 +133,24 @@ export interface WatchlistCheckRow extends WatchlistEntry {
   error: string | null;
 }
 
+/**
+ * Company names written while the app ran on the mock provider look like
+ * "AAPL (mock -- name unknown)" and persist in the stocks table long
+ * after the real provider takes over. Displaying one next to genuine
+ * prices is actively harmful in both directions: it makes real data look
+ * fabricated, and it trains the reader to ignore a "mock" label that in
+ * other screens would be a true warning.
+ *
+ * So a mock-era name is treated as no name at all. The ticker is shown
+ * on its own until something real replaces it.
+ */
+const MOCK_NAME_PATTERN = /\(mock\b/i;
+
+function realCompanyName(name: string | null | undefined): string | null {
+  if (!name) return null;
+  return MOCK_NAME_PATTERN.test(name) ? null : name;
+}
+
 function toEntry(row: {
   id: string;
   ticker: string;
@@ -143,7 +161,7 @@ function toEntry(row: {
   return {
     id: row.id,
     ticker: row.ticker,
-    companyName: row.stock?.name ?? null,
+    companyName: realCompanyName(row.stock?.name),
     notes: row.notes,
     addedAt: row.addedAt.toISOString(),
   };
