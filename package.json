@@ -13,7 +13,8 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "backtest:download": "tsx scripts/backtest/download.ts",
-    "backtest:cases": "tsx scripts/backtest/cases.ts"
+    "backtest:cases": "tsx scripts/backtest/cases.ts",
+    "backtest:universe": "node --max-old-space-size=6144 --import tsx scripts/backtest/universe.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",

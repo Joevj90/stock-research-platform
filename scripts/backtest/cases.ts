@@ -72,7 +72,7 @@ function captureFor(series: DailySeries, c: Case, trades: Trade[]) {
 }
 
 function fmtTrade(t: Trade): string {
-  const rs = t.selloffStrength === null ? "" : t.selloffStrength ? "  RS:held-in-selloff" : "  RS:fell-with-index";
+  const rs = t.selloffStrength === null ? "" : t.selloffStrength ? "  RS:led-while-SPY-weak" : "  RS:lagged-while-SPY-weak";
   return (
     `    ${t.setup}  signal ${t.signalDate}  buy ${t.entryDate} @ ${t.entryPrice.toFixed(2)}  stop ${t.stop.toFixed(2)}` +
     `  ->  ${t.exitReason.padEnd(8)} ${t.exitDate} @ ${t.exitPrice.toFixed(2)}  ${pct(t.returnPct).padStart(8)}  (${t.holdDays}d, ${t.tier})${rs}`
@@ -164,7 +164,7 @@ async function main() {
   report.variants = variantResults;
 
   const bySetup = statsBy(defaultTrades, (t) => t.setup);
-  const byRs = statsBy(defaultTrades, (t) => (t.selloffStrength === null ? "no-selloff" : t.selloffStrength ? "held" : "fell"));
+  const byRs = statsBy(defaultTrades, (t) => (t.selloffStrength === null ? "index-ok" : t.selloffStrength ? "led" : "lagged"));
   console.log("\n=== DEFAULT RULES BY SETUP / BY SELLOFF STRENGTH (case stocks only) ===");
   for (const [k, st] of [...Object.entries(bySetup), ...Object.entries(byRs)]) {
     console.log(`  ${k.padEnd(11)} ${String(st.closedTrades).padStart(4)} closed  win ${(st.winRate * 100).toFixed(0)}%  avg ${pct(st.avgReturn)}  median ${pct(st.medianReturn)}`);

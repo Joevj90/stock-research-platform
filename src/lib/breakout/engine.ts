@@ -26,7 +26,7 @@
  */
 
 import type { BreakoutConfig, LiquidityTier } from "./config";
-import { type DailySeries, type Segment, splitOnGaps, weeklyView } from "./series";
+import { type DailySeries, type Segment, splitOnGaps, type WeeklyView, weeklyView } from "./series";
 import { computeSignals, type IndexContext, type Signal, type SetupKind } from "./signals";
 
 /** "R" = re-entry on a 10-week-MA reclaim (reentryMode "maReclaim"). */
@@ -160,7 +160,7 @@ export function simulateSegment(
         pos = {
           entryIdx: i,
           entryFill: open[i]! * (1 + slip),
-          stop: pendingEntry.stop,
+          stop: capStop(pendingEntry.stop, open[i]!, cfg),
           setup: pendingEntry.setup,
           signal: pendingEntry.signal,
         };
@@ -234,6 +234,70 @@ export function simulateSegment(
     close_(pos, n - 1, close[n - 1]!, seg.endsAbruptly ? "delisted" : "open");
   }
   return { symbol: seg.symbol, trades, signalCount, skippedGapBelowStop, cancelledConfirmations };
+}
+
+/** Raise a stop that sits more than `maxStopPct` below the entry open. */
+export function capStop(stop: number, entryOpen: number, cfg: BreakoutConfig): number {
+  return Math.max(stop, entryOpen * (1 - cfg.maxStopPct));
+}
+
+export interface FixedEntryResult {
+  entryIdx: number;
+  entryFill: number;
+  stop: number;
+  exitIdx: number;
+  exitFill: number;
+  exitReason: ExitReason;
+  returnPct: number;
+}
+
+/**
+ * Apply the strategy's EXIT rules to an entry chosen from outside
+ * (the random-entry control). Same rules and costs as simulateSegment:
+ * buy at the open of `entryIdx`, initial stop at `stopPct` below that
+ * open (capped by maxStopPct), intraday stop with gap-through fills,
+ * weekly close below the trailing average exits at the next open, and
+ * the same delisting treatment. A test checks it reproduces the main
+ * engine's exits exactly.
+ */
+export function simulateFromEntry(
+  seg: Segment,
+  wv: WeeklyView,
+  entryIdx: number,
+  stopPct: number,
+  tier: LiquidityTier,
+  cfg: BreakoutConfig,
+): FixedEntryResult | null {
+  const n = seg.dates.length;
+  if (entryIdx >= n) return null;
+  const slip = cfg.slippageBps[tier] / 1e4;
+  const cost = cfg.costBpsPerSide / 1e4;
+  const o = seg.open[entryIdx]!;
+  const stop = capStop(o * (1 - stopPct), o, cfg);
+  const entryFill = o * (1 + slip);
+  const done = (exitIdx: number, raw: number, reason: ExitReason): FixedEntryResult => {
+    if (reason === "delisted" && cfg.delistMode === "zero") {
+      return { entryIdx, entryFill, stop, exitIdx, exitFill: 0, exitReason: reason, returnPct: -1 };
+    }
+    const exitFill = raw * (1 - slip);
+    return {
+      entryIdx,
+      entryFill,
+      stop,
+      exitIdx,
+      exitFill,
+      exitReason: reason,
+      returnPct: (exitFill * (1 - cost)) / (entryFill * (1 + cost)) - 1,
+    };
+  };
+  let pendingExit: number | null = null;
+  for (let i = entryIdx; i < n; i++) {
+    if (pendingExit === i) return done(i, seg.open[i]!, "trailing");
+    if (seg.low[i]! <= stop) return done(i, Math.min(seg.open[i]!, stop), "stop");
+    const ma = wv.weeklySma[i]!;
+    if (wv.isWeekEnd[i] && Number.isFinite(ma) && seg.close[i]! < ma && i + 1 < n) pendingExit = i + 1;
+  }
+  return done(n - 1, seg.close[n - 1]!, seg.endsAbruptly ? "delisted" : "open");
 }
 
 function lastTierFor(trades: Trade[]): LiquidityTier {

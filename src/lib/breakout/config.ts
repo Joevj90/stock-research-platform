@@ -97,17 +97,29 @@ export interface BreakoutConfig {
   entryMode: "breakout" | "confirm5";
   confirmDays: number;
 
-  // ---- Relative strength during index selloffs ----
-  /** Index drawdown (from its high within the lookback) that counts as a
-   * selloff. */
-  selloffMinDrawdown: number;
-  selloffLookbackDays: number;
-  /** When true, only take signals that showed strength in a recent
-   * selloff. Default false: the tag is recorded and reported, so its value
-   * can be measured instead of assumed. */
+  // ---- Relative-strength leadership while the index is weak ----
+  // Approved Oct 2026 (replaces a narrower "held up on the index's
+  // trough day" test that almost never applied and mislabelled PLTR in
+  // Aug 2024). A stock shows leadership on day i if its price relative to
+  // SPY (close / SPY close) makes a new `rsHighLookbackDays` high while
+  // SPY itself is at least `rsIndexMinDrawdown` below its own high over
+  // the same lookback. The signal is tagged:
+  //   true  = leadership happened within the last `rsRecentDays` days
+  //   false = SPY was weak in that window but the stock did not lead
+  //   null  = SPY was never that weak in the window (nothing to measure)
+  rsIndexMinDrawdown: number;
+  rsHighLookbackDays: number;
+  rsRecentDays: number;
+  /** When true, only take signals tagged true. Default false: the tag is
+   * recorded and reported, so its value is measured instead of assumed. */
   requireSelloffStrength: boolean;
 
   // ---- Exits ----
+  /** Approved Oct 2026: no initial stop may sit more than this far below
+   * the entry open. If a setup's own stop is lower (Setup C's catalyst-day
+   * low put ASTS's stop 67% below the entry), the stop is raised to this
+   * level instead. */
+  maxStopPct: number;
   /** Weekly close below this many weeks' simple moving average of weekly
    * closes exits at the next open. */
   trailingWeeks: number;
@@ -194,10 +206,12 @@ export const DEFAULT_BREAKOUT_CONFIG: BreakoutConfig = {
   entryMode: "breakout",
   confirmDays: 5,
 
-  selloffMinDrawdown: 0.08,
-  selloffLookbackDays: 63,
+  rsIndexMinDrawdown: 0.05,
+  rsHighLookbackDays: 63,
+  rsRecentDays: 21,
   requireSelloffStrength: false,
 
+  maxStopPct: 0.2,
   trailingWeeks: 10,
 
   reentryMode: "newSetup",
@@ -217,6 +231,12 @@ export const DEFAULT_BREAKOUT_CONFIG: BreakoutConfig = {
  * from the default so a difference in results can be attributed to it. */
 export const BREAKOUT_VARIANTS: Record<string, Partial<BreakoutConfig>> = {
   default: {},
+  // Approved Oct 2026: Setup A tightness levels decided BEFORE the
+  // universe run. The 12% default missed most case-study bases (SMCI
+  // ~22%, RKLB ~28%); these test whether looser bases help, without
+  // tuning to those stocks.
+  tight20: { tightMaxRange: 0.2 },
+  tight30: { tightMaxRange: 0.3 },
   confirm5: { entryMode: "confirm5" },
   catalystImmediate: { catalystEntry: "immediate" },
   maReclaim: { reentryMode: "maReclaim" },

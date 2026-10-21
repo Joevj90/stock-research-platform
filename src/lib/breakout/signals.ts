@@ -31,13 +31,14 @@ export interface Signal {
   volumeRatio: number;
   /** Setup A only: measured base length in trading days. */
   baseDays?: number;
-  /** True if the stock held or rose while the index fell at least
-   * `selloffMinDrawdown` in the lookback; false if it fell with it; null
-   * if there was no selloff to measure against. */
+  /** Relative-strength leadership tag (see rsLeadershipTags): true = the
+   * stock made a new relative high vs SPY while SPY was weak, within the
+   * last few weeks; false = SPY was weak but the stock did not lead;
+   * null = SPY was not weak, nothing to measure. */
   selloffStrength: boolean | null;
 }
 
-/** The index (SPY) closes, keyed by date, for the selloff test. */
+/** The index (SPY), keyed by date, for the relative-strength tag. */
 export interface IndexContext {
   dates: string[];
   close: number[];
@@ -48,10 +49,42 @@ export function buildIndexContext(s: DailySeries): IndexContext {
   return { dates: s.dates, close: s.close, indexByDate: new Map(s.dates.map((d, i) => [d, i])) };
 }
 
-function liquidityTier(avgDollar50: number, cfg: BreakoutConfig): LiquidityTier {
+export function isGovernanceExcluded(symbol: string, date: string, cfg: BreakoutConfig): boolean {
+  return cfg.governanceExclusions.some((g) => g.symbol === symbol && date >= g.from);
+}
+
+export function liquidityTier(avgDollar50: number, cfg: BreakoutConfig): LiquidityTier {
   if (avgDollar50 >= cfg.largeTierDollarVolume) return "large";
   if (avgDollar50 >= cfg.midTierDollarVolume) return "mid";
   return "small";
+}
+
+/**
+ * Which days a stock was tradable under the eligibility rules, and its
+ * liquidity tier on each day, using only data up to that day. Shared by
+ * the signals and by the random-entry control, so both draw from the
+ * same pool of stocks.
+ */
+export function eligibilityByDay(
+  s: DailySeries,
+  cfg: BreakoutConfig,
+): { eligible: boolean[]; tier: (LiquidityTier | null)[] } {
+  const dollar = s.close.map((c, i) => c * s.volume[i]!);
+  const avgDollar20 = priorAverage(dollar, 20);
+  const avgDollar50 = priorAverage(dollar, 50);
+  const eligible: boolean[] = [];
+  const tier: (LiquidityTier | null)[] = [];
+  for (let i = 0; i < s.dates.length; i++) {
+    const has = Number.isFinite(avgDollar50[i]!);
+    eligible.push(
+      has &&
+        s.close[i]! >= cfg.minPrice &&
+        avgDollar20[i]! >= cfg.minAvgDollarVolume &&
+        !isGovernanceExcluded(s.symbol, s.dates[i]!, cfg),
+    );
+    tier.push(has ? liquidityTier(avgDollar50[i]!, cfg) : null);
+  }
+  return { eligible, tier };
 }
 
 function maxOf(a: number[], from: number, to: number): number {
@@ -66,37 +99,39 @@ function minOf(a: number[], from: number, to: number): number {
 }
 
 /**
- * Strength during an index selloff, measured over the `lookback` trading
- * days of the index ending on `date`: find the index's highest close and
- * the lowest close after it. If that decline is at least `minDrawdown`,
- * report whether the stock's close on the trough date was at or above
- * its close on the peak date.
+ * Relative-strength leadership tag for every day of a stock (see the
+ * rs* settings in config.ts). Uses only data up to each day.
  */
-export function selloffStrength(
-  stockDates: Map<string, number>,
-  stockClose: number[],
-  index: IndexContext | null,
-  date: string,
-  lookback: number,
-  minDrawdown: number,
-): boolean | null {
-  if (!index) return null;
-  const j = index.indexByDate.get(date);
-  if (j === undefined || j < lookback) return null;
-  let peakIdx = j - lookback + 1;
-  for (let k = peakIdx; k <= j; k++) if (index.close[k]! > index.close[peakIdx]!) peakIdx = k;
-  let troughIdx = peakIdx;
-  for (let k = peakIdx; k <= j; k++) if (index.close[k]! < index.close[troughIdx]!) troughIdx = k;
-  const drawdown = index.close[troughIdx]! / index.close[peakIdx]! - 1;
-  if (drawdown > -minDrawdown) return null;
-  const sp = stockDates.get(index.dates[peakIdx]!);
-  const st = stockDates.get(index.dates[troughIdx]!);
-  if (sp === undefined || st === undefined) return null;
-  return stockClose[st]! >= stockClose[sp]!;
-}
-
-export function isGovernanceExcluded(symbol: string, date: string, cfg: BreakoutConfig): boolean {
-  return cfg.governanceExclusions.some((g) => g.symbol === symbol && date >= g.from);
+export function rsLeadershipTags(s: DailySeries, index: IndexContext | null, cfg: BreakoutConfig): (boolean | null)[] {
+  const n = s.dates.length;
+  const out: (boolean | null)[] = new Array<boolean | null>(n).fill(null);
+  if (!index) return out;
+  const L = cfg.rsHighLookbackDays;
+  const ratio = new Array<number>(n).fill(NaN);
+  const indexWeak = new Array<boolean>(n).fill(false);
+  const event = new Array<boolean>(n).fill(false);
+  for (let i = 0; i < n; i++) {
+    const j = index.indexByDate.get(s.dates[i]!);
+    if (j === undefined) continue;
+    ratio[i] = s.close[i]! / index.close[j]!;
+    if (j >= L - 1) indexWeak[i] = index.close[j]! <= maxOf(index.close, j - L + 1, j) * (1 - cfg.rsIndexMinDrawdown);
+    if (indexWeak[i] && i >= L) {
+      let prior = -Infinity;
+      for (let k = i - L; k < i; k++) if (Number.isFinite(ratio[k]!) && ratio[k]! > prior) prior = ratio[k]!;
+      event[i] = Number.isFinite(prior) && ratio[i]! > prior;
+    }
+  }
+  const R = cfg.rsRecentDays;
+  for (let i = 0; i < n; i++) {
+    let weakSeen = false;
+    let led = false;
+    for (let k = Math.max(0, i - R + 1); k <= i; k++) {
+      if (indexWeak[k]) weakSeen = true;
+      if (event[k]) led = true;
+    }
+    out[i] = weakSeen ? led : null;
+  }
+  return out;
 }
 
 /** Returns, for each bar, the signals that fired at that bar's close. */
@@ -105,13 +140,11 @@ export function computeSignals(s: DailySeries, cfg: BreakoutConfig, index: Index
   const out: Signal[][] = Array.from({ length: n }, () => []);
   const { open, high, low, close, volume } = s;
 
-  const dollar = close.map((c, i) => c * volume[i]!);
   const avgVol20 = priorAverage(volume, 20);
-  const avgDollar20 = priorAverage(dollar, 20);
-  const avgDollar50 = priorAverage(dollar, 50);
   const vol10 = sma(volume, 10);
   const sma50 = sma(close, 50);
-  const dateIdx = new Map(s.dates.map((d, i) => [d, i]));
+  const elig = eligibilityByDay(s, cfg);
+  const rsTags = rsLeadershipTags(s, index, cfg);
 
   const T = cfg.tightDays;
   const firstA = T + cfg.dryUpLookbackDays + 10;
@@ -121,21 +154,13 @@ export function computeSignals(s: DailySeries, cfg: BreakoutConfig, index: Index
     null;
 
   for (let i = 1; i < n; i++) {
-    if (!Number.isFinite(avgVol20[i]!) || !Number.isFinite(avgDollar50[i]!)) continue;
-    const eligible =
-      close[i]! >= cfg.minPrice &&
-      avgDollar20[i]! >= cfg.minAvgDollarVolume &&
-      !isGovernanceExcluded(s.symbol, s.dates[i]!, cfg);
-    const tier = liquidityTier(avgDollar50[i]!, cfg);
+    const tier = elig.tier[i];
+    if (!Number.isFinite(avgVol20[i]!) || tier == null) continue;
+    const eligible = elig.eligible[i]!;
     const volRatio = avgVol20[i]! > 0 ? volume[i]! / avgVol20[i]! : 0;
-    let rsCache: boolean | null | undefined;
-    const rs = () =>
-      rsCache !== undefined
-        ? rsCache
-        : (rsCache = selloffStrength(dateIdx, close, index, s.dates[i]!, cfg.selloffLookbackDays, cfg.selloffMinDrawdown));
     const emit = (sig: Omit<Signal, "index" | "date" | "tier" | "volumeRatio" | "selloffStrength">) => {
       if (!eligible) return;
-      const strength = rs();
+      const strength = rsTags[i]!;
       if (cfg.requireSelloffStrength && strength !== true) return;
       out[i]!.push({ ...sig, index: i, date: s.dates[i]!, tier, volumeRatio: volRatio, selloffStrength: strength });
     };

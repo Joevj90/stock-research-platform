@@ -67,7 +67,9 @@ export function statsBy<K extends string>(trades: Trade[], key: (t: Trade) => K)
   const groups = new Map<K, Trade[]>();
   for (const t of trades) {
     const k = key(t);
-    groups.set(k, [...(groups.get(k) ?? []), t]);
+    const list = groups.get(k);
+    if (list) list.push(t);
+    else groups.set(k, [t]);
   }
   return Object.fromEntries([...groups].map(([k, ts]) => [k, tradeStats(ts)])) as Record<K, TradeStats>;
 }
