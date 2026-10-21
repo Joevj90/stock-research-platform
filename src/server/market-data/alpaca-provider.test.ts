@@ -159,3 +159,29 @@ describe("Alpaca time helpers", () => {
     expect(inRegularSession("2026-12-01T14:00:00Z", "1hour")).toBe(true); // 9:00 hourly bar holds the open
   });
 });
+
+describe("AlpacaMarketDataProvider.getHistoryBatch", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("asks for many symbols at once, follows pages, and groups bars by ticker", async () => {
+    const urls: URL[] = [];
+    stubFetch((u) => {
+      urls.push(u);
+      return u.searchParams.get("page_token")
+        ? { status: 200, body: { bars: { AAPL: [day("2026-10-20", 2)] }, next_page_token: null } }
+        : {
+            status: 200,
+            body: { bars: { AAPL: [day("2026-10-19", 1)], "BRK.B": [day("2026-10-19", 500)] }, next_page_token: "p2" },
+          };
+    });
+    const p = new AlpacaMarketDataProvider("k", "s", null, () => MID_SESSION);
+    const r = await p.getHistoryBatch(["aapl", "BRK.B", "bad ticker!"], new Date("2026-01-01T00:00:00Z"), new Date());
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(urls[0]!.pathname).toBe("/v2/stocks/bars");
+    expect(urls[0]!.searchParams.get("symbols")).toBe("AAPL,BRK.B"); // malformed ticker dropped
+    expect(urls[0]!.searchParams.get("end")).toBe("2026-10-21T00:00:00.000Z"); // completed days only
+    expect(r.data.get("AAPL")!.map((b) => b.close)).toEqual([1, 2]);
+    expect(r.data.get("BRK.B")!.length).toBe(1);
+  });
+});

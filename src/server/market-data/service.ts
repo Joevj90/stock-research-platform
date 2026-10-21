@@ -461,3 +461,33 @@ function internalError(fn: string, ticker: string, err: unknown): Result<never> 
     error: { code: "INTERNAL_ERROR", message: "Failed to fetch market data." },
   };
 }
+
+/**
+ * Daily bars for many tickers at once, for code-only scans such as the
+ * Trend Reset S&P 500 suggestions.
+ *
+ * Deliberately NOT cached in the database: a scan touches ~500 stocks,
+ * and writing ~140,000 bars per scan would be slower than the scan
+ * itself and buy nothing (the scan runs at most a few times a day).
+ *
+ * Refuses to run on a provider without batch support. On FMP's free
+ * plan, a 500-stock scan one ticker at a time would spend twice the
+ * whole day's 250-request budget on a single click.
+ */
+export async function getDailyHistoryBatch(
+  tickers: string[],
+  calendarDays: number,
+): Promise<Result<Map<string, PriceBar[]>>> {
+  if (!marketDataProvider.getHistoryBatch) {
+    return {
+      ok: false,
+      error: {
+        code: "PROVIDER_UNSUPPORTED",
+        message: `The "${marketDataProvider.id}" price provider cannot fetch many stocks at once. Set MARKET_DATA_PROVIDER=alpaca.`,
+      },
+    };
+  }
+  const to = new Date();
+  const from = new Date(to.getTime() - calendarDays * 86_400_000);
+  return marketDataProvider.getHistoryBatch(tickers, from, to);
+}

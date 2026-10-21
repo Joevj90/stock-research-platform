@@ -475,3 +475,30 @@ model WatchlistItem {
   @@index([addedAt])
   @@map("watchlist_items")
 }
+
+/// One run of the Trend Reset scan over the S&P 500 (the Suggestions page).
+///
+/// The scan runs in batches of ~50 stocks, one request each, so no single
+/// request comes near the hosting plan's time limit. Each batch merges its
+/// results into this row; `completedAt` is set when the last batch lands.
+/// Only stocks meeting all four conditions or three of four are stored
+/// (`rows`); everything else is just counted. Kept as history, so a past
+/// day's suggestions can be compared with what the stocks did afterwards.
+model TrendResetScan {
+  id           String    @id @default(cuid())
+  startedAt    DateTime  @default(now())
+  completedAt  DateTime?
+  totalBatches Int
+  batchesDone  Int       @default(0)
+  /// Trading date of the newest price bar the scan used (YYYY-MM-DD).
+  asOfDate     String?
+  evaluated    Int       @default(0)
+  /// JSON text of ScanRow[] (src/lib/trend-reset-scan.ts). Stored as text
+  /// rather than a Json column to keep the write path plain strings.
+  rowsJson     String    @default("[]")
+  /// JSON text of ScanSkip[]: stocks that could not be evaluated, and why.
+  skippedJson  String    @default("[]")
+
+  @@index([startedAt])
+  @@map("trend_reset_scans")
+}

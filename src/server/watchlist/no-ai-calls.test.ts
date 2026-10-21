@@ -22,6 +22,12 @@ const WATCHLIST_PATHS = [
   "src/server/watchlist",
   "src/app/api/watchlist",
   "src/lib/trend-reset.ts",
+  // The S&P 500 suggestions scan: 500 stocks per click, so an AI call
+  // here would be the old $15-a-day screener all over again.
+  "src/server/suggestions",
+  "src/app/api/suggestions",
+  "src/app/suggestions",
+  "src/lib/trend-reset-scan.ts",
 ];
 
 /** Imports that would pull an AI call into this path, directly or by

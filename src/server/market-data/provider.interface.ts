@@ -38,6 +38,12 @@ export interface MarketDataProvider {
     to: Date
   ): Promise<Result<PriceBar[]>>;
 
+  /** OPTIONAL. Daily bars for many tickers at once, keyed by upper-case
+   * ticker. Only providers that can do this in a handful of requests
+   * implement it (Alpaca); the S&P 500 scan refuses to run without it
+   * rather than spending hundreds of single-ticker requests. */
+  getHistoryBatch?(tickers: string[], from: Date, to: Date): Promise<Result<Map<string, PriceBar[]>>>;
+
   /** Up to `limit` peer/competitor ticker symbols for comparison purposes
    * (same sector/exchange/market-cap range, as defined by the provider).
    * Added for the Valuation Engine's peer comparison — returns real

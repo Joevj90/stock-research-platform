@@ -178,6 +178,50 @@ export class AlpacaMarketDataProvider implements MarketDataProvider {
     return { ok: true, data: quote };
   }
 
+  /**
+   * Completed daily bars for many tickers in as few requests as possible
+   * (Alpaca accepts a list of symbols per request). Used by the Trend
+   * Reset S&P 500 scan: ~50 tickers x ~280 bars is two requests, where
+   * fetching one ticker at a time would take fifty.
+   *
+   * Tickers Alpaca has no bars for are simply absent from the result.
+   */
+  async getHistoryBatch(tickers: string[], from: Date, to: Date): Promise<Result<Map<string, PriceBar[]>>> {
+    const symbols = [...new Set(tickers.map((t) => t.toUpperCase()))].filter((t) => validateTicker(t).ok);
+    const out = new Map<string, PriceBar[]>();
+    if (!symbols.length) return { ok: true, data: out };
+    const end = Math.min(to.getTime(), lastCompletedDayEnd(this.now()));
+    if (end <= from.getTime()) return { ok: true, data: out };
+    let token: string | undefined;
+    for (let page = 0; page < MAX_PAGES * 5; page++) {
+      const params: Record<string, string> = {
+        symbols: symbols.join(","),
+        timeframe: "1Day",
+        start: from.toISOString(),
+        end: new Date(end).toISOString(),
+        feed: "sip",
+        adjustment: "all",
+        limit: "10000",
+      };
+      if (token) params.page_token = token;
+      const r = await this.fetchJson<{ bars: Record<string, AlpacaBar[]> | null; next_page_token: string | null }>(
+        `${DATA_URL}/stocks/bars`,
+        params,
+        symbols.join(","),
+      );
+      if (!r.ok) return r;
+      for (const [sym, bars] of Object.entries(r.data.bars ?? {})) {
+        const list = out.get(sym) ?? [];
+        for (const b of bars) list.push(toDailyBar(b));
+        out.set(sym, list);
+      }
+      token = r.data.next_page_token ?? undefined;
+      if (!token) break;
+    }
+    for (const list of out.values()) list.sort((a, b) => (a.timestamp < b.timestamp ? -1 : 1));
+    return { ok: true, data: out };
+  }
+
   async getPeerSymbols(ticker: string, limit: number): Promise<Result<string[]>> {
     if (this.peerFallback) return this.peerFallback.getPeerSymbols(ticker, limit);
     return {

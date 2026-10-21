@@ -15,6 +15,9 @@ export default function HomePage() {
         <Link href="/watchlist" className="text-xs text-gray-400 hover:text-gray-200">
           Watchlist →
         </Link>
+        <Link href="/suggestions" className="text-xs text-gray-400 hover:text-gray-200">
+          Suggestions →
+        </Link>
         <Link href="/pattern-lab" className="text-xs text-gray-500 hover:text-gray-300">
           Pattern Lab (experiment) →
         </Link>

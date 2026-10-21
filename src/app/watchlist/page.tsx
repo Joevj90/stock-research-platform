@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { TrendResetEvidenceNote as EvidenceNote } from "@/components/TrendResetEvidenceNote";
 import type { WatchlistCheckResult, WatchlistCheckRow, WatchlistEntry } from "@/server/watchlist/service";
 
 const MAX_WATCHLIST_SIZE = 25;
@@ -143,8 +144,11 @@ export default function WatchlistPage() {
         </form>
         {addError && <p className="mt-2 text-xs text-down">{addError}</p>}
         <p className="mt-2 text-xs text-gray-500">
-          {items.length} of {MAX_WATCHLIST_SIZE} slots used. The cap exists because the market-data plan allows 250
-          requests a day and each check costs one per stock.
+          {items.length} of {MAX_WATCHLIST_SIZE} slots used. For a wider search, see{" "}
+          <Link href="/suggestions" className="underline underline-offset-2 hover:text-gray-300">
+            Suggestions
+          </Link>
+          , which checks the whole S&amp;P 500.
         </p>
       </section>
 
@@ -172,7 +176,7 @@ export default function WatchlistPage() {
           <span className={check.data.qualifyingCount > 0 ? "text-up" : ""}>
             {check.data.qualifyingCount} of {check.data.rows.length} meet all four conditions
           </span>{" "}
-          · used up to {check.data.marketDataRequestsUsed} of the 250 daily market-data requests
+          · used up to {check.data.marketDataRequestsUsed} market-data requests
         </p>
       )}
 
@@ -204,34 +208,6 @@ export default function WatchlistPage() {
  * buried. A screen that lists qualifying stocks without it would read
  * as a recommendation, and the evidence does not support that reading.
  */
-function EvidenceNote() {
-  const [open, setOpen] = useState(false);
-  return (
-    <section className="rounded-lg border border-yellow-700/40 bg-yellow-900/10 p-3 text-xs text-yellow-300">
-      <p>
-        <span className="font-semibold">Meeting all four conditions is not a buy signal.</span> Backtested over
-        2008–2026 on 493 stocks, Trend Reset beat comparable random picks by about 0.78% per trade over roughly three
-        months. Real, but modest and uneven — and more than half of individual trades lost money.
-      </p>
-      <button onClick={() => setOpen((v) => !v)} className="mt-1 underline underline-offset-2">
-        {open ? "Hide the detail" : "What the test did and didn't show"}
-      </button>
-      {open && (
-        <ul className="mt-2 flex list-disc flex-col gap-1 pl-4">
-          <li>Positive in 16 of 19 calendar years, and not explained by the 2009 or 2020 rebounds.</li>
-          <li>About half the total edge came from roughly 5 months out of 213. Most months were near a coin flip.</li>
-          <li>Win rate 38.9%; the median trade lost 2.41%. The average is carried by a minority of large winners.</li>
-          <li>
-            The portfolio&apos;s 2.3-point annual advantage sits inside the 1–4 point range that survivorship bias
-            alone could explain, because the test could only use companies still in the index today.
-          </li>
-          <li>Backtested on a ~3 month hold. Nothing here has been tested as a short-term trade.</li>
-        </ul>
-      )}
-    </section>
-  );
-}
-
 function WatchlistCard({
   item,
   row,
