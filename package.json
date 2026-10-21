@@ -11,7 +11,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:generate": "prisma generate",
-    "db:push": "prisma db push"
+    "db:push": "prisma db push",
+    "backtest:download": "tsx scripts/backtest/download.ts",
+    "backtest:cases": "tsx scripts/backtest/cases.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",
@@ -31,6 +33,7 @@
     "postcss": "^8.5.26",
     "prisma": "^5.20.0",
     "tailwindcss": "^3.4.13",
+    "tsx": "^4.23.15",
     "typescript": "^5.5.4",
     "vitest": "^4.1.11"
   }

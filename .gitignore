@@ -5,3 +5,13 @@ dev.db
 dev.db-journal
 .env
 *.log
+
+# Local secrets (API keys). Never commit these.
+.env*.local
+
+# Backtest output and one-off data-check scripts
+backtest-results/
+fmp-data-check-report.json
+alpaca-data-check-report.json
+scripts/fmp-data-check.mjs
+scripts/alpaca-data-check.mjs
