@@ -14,7 +14,8 @@
     "db:push": "prisma db push",
     "backtest:download": "tsx scripts/backtest/download.ts",
     "backtest:cases": "tsx scripts/backtest/cases.ts",
-    "backtest:universe": "node --max-old-space-size=6144 --import tsx scripts/backtest/universe.ts"
+    "backtest:universe": "node --max-old-space-size=6144 --import tsx scripts/backtest/universe.ts",
+    "check:alpaca": "tsx scripts/check-alpaca-provider.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",

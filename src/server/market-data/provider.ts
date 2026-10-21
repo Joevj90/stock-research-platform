@@ -2,6 +2,7 @@ import { env } from "@/server/config/env";
 import { logger } from "@/server/logger";
 import { MockMarketDataProvider } from "./mock-provider";
 import { FmpMarketDataProvider } from "./fmp-provider";
+import { AlpacaMarketDataProvider } from "./alpaca-provider";
 import type { MarketDataProvider } from "./provider.interface";
 
 const log = logger.child("market-data:factory");
@@ -24,6 +25,13 @@ function createProvider(): MarketDataProvider {
     case "fmp":
       log.info("using Financial Modeling Prep market data provider");
       return new FmpMarketDataProvider(env.FMP_API_KEY ?? "");
+    case "alpaca":
+      log.info("using Alpaca market data provider (peers fall back to FMP when a key is set)");
+      return new AlpacaMarketDataProvider(
+        env.ALPACA_API_KEY_ID ?? "",
+        env.ALPACA_API_SECRET_KEY ?? "",
+        env.FMP_API_KEY ? new FmpMarketDataProvider(env.FMP_API_KEY) : null,
+      );
     case "alpha_vantage":
     case "finnhub":
       throw new Error(

@@ -21,8 +21,13 @@ const envSchema = z.object({
   // Market data provider selection + credentials. MOCK requires no key.
   // "fmp" (Financial Modeling Prep) is the implemented real provider — see
   // src/server/market-data/fmp-provider.ts for why it was chosen.
-  MARKET_DATA_PROVIDER: z.enum(["mock", "fmp", "alpha_vantage", "finnhub"]).default("mock"),
+  // "alpaca" (added Oct 2026) serves daily/intraday prices for every US
+  // stock on its free plan; FMP's free plan only covers ~87 sample stocks.
+  // Fundamentals, news, macro and insider data stay on FMP regardless.
+  MARKET_DATA_PROVIDER: z.enum(["mock", "fmp", "alpaca", "alpha_vantage", "finnhub"]).default("mock"),
   FMP_API_KEY: z.string().optional(),
+  ALPACA_API_KEY_ID: z.string().optional(),
+  ALPACA_API_SECRET_KEY: z.string().optional(),
 
   // Fundamentals (income statement / balance sheet / cash flow) provider
   // selection. Separate from MARKET_DATA_PROVIDER on purpose — they're

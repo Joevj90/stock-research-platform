@@ -48,7 +48,7 @@ export interface Quote {
   asOf: string; // ISO 8601
 }
 
-export type DataProviderId = "mock" | "fmp" | "alpha_vantage" | "finnhub";
+export type DataProviderId = "mock" | "fmp" | "alpaca" | "alpha_vantage" | "finnhub";
 
 /**
  * The supported historical lookback windows. This is the single source of
